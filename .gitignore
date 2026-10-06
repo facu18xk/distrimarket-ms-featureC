@@ -1,0 +1,10 @@
+# Test sources
+/src/test/
+
+# IntelliJ IDEA
+/.idea/
+*.iml
+
+# Build output and local logs
+/target/
+/logs/

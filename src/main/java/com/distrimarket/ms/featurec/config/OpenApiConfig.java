@@ -1,0 +1,31 @@
+package com.distrimarket.ms.featurec.config;
+
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.servers.Server;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
+
+@Configuration
+public class OpenApiConfig {
+
+    @Value("${server.servlet.context-path:/api/v1}")
+    private String contextPath;
+
+    @Bean
+    public OpenAPI customOpenAPI() {
+        return new OpenAPI()
+                .servers(List.of(new Server().url(contextPath).description("Servidor Local / Context Path")))
+                .info(new Info()
+                        .title("Distrimarket MS Feature C - Facturación y Ventas")
+                        .version("1.0.0")
+                        .description("Microservicio encargado de la gestión de clientes, timbrados, comprobantes y emisión de facturas.")
+                        .contact(new Contact().name("Equipo Distrimarket").email("soporte@distrimarket.com"))
+                        .license(new License().name("Apache 2.0").url("https://springdoc.org")));
+    }
+}
