@@ -224,7 +224,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/FacturaVentaResponse'
         '422':
-          description: La factura debe contener al menos un detalle.
+          description: La factura debe contener al menos un detalle y debe haber stock suficiente en un depósito activo para cada producto.
           content:
             application/json:
               schema:
@@ -265,7 +265,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
-          description: La factura debe contener al menos un detalle.
+          description: La factura debe contener al menos un detalle y debe haber stock suficiente en un depósito activo para cada producto.
           content:
             application/json:
               schema:
@@ -293,6 +293,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: Conflicto con el estado actual de la factura
+        '422':
+          description: Stock insuficiente para volver a emitir la factura
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     delete:
       tags: [Facturas-Venta]
       operationId: deleteFacturaVenta
@@ -350,6 +356,12 @@ paths:
                 $ref: '#/components/schemas/FacturaVentaDetalleResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          description: Stock insuficiente para el producto en el depósito
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /facturas-venta/{facturaId}/detalles/{detalleId}:
     parameters:
       - $ref: '#/components/parameters/FacturaIdPath'
@@ -386,6 +398,12 @@ paths:
                 $ref: '#/components/schemas/FacturaVentaDetalleResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          description: Stock insuficiente para el producto en el depósito
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   parameters:
     IdPath:

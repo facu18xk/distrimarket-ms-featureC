@@ -10,6 +10,7 @@ import com.distrimarket.commons.entity.Deposito;
 import com.distrimarket.commons.entity.Empleado;
 import com.distrimarket.commons.entity.MedioPago;
 import com.distrimarket.commons.entity.Producto;
+import com.distrimarket.commons.entity.StockDeposito;
 import com.distrimarket.commons.entity.Timbrado;
 import com.distrimarket.commons.dto.EstadoFacturaVenta;
 import com.distrimarket.ms.featurec.config.PageableSortSupport;
@@ -21,10 +22,12 @@ import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaDetalleMapper;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
+import com.distrimarket.ms.featurec.repository.DepositoRepository;
 import com.distrimarket.ms.featurec.repository.FacturaVentaDetalleRepository;
 import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.repository.MedioPagoRepository;
 import com.distrimarket.ms.featurec.repository.ProductoRepository;
+import com.distrimarket.ms.featurec.repository.StockDepositoRepository;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,7 +38,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 public class FacturaVentaService
@@ -48,6 +54,8 @@ public class FacturaVentaService
     private final FacturaVentaDetalleMapper detalleMapper;
     private final MedioPagoRepository medioPagoRepository;
     private final ProductoRepository productoRepository;
+    private final DepositoRepository depositoRepository;
+    private final StockDepositoRepository stockDepositoRepository;
     private final EntityManager entityManager;
 
     public FacturaVentaService(
@@ -57,6 +65,8 @@ public class FacturaVentaService
             FacturaVentaDetalleMapper detalleMapper,
             MedioPagoRepository medioPagoRepository,
             ProductoRepository productoRepository,
+            DepositoRepository depositoRepository,
+            StockDepositoRepository stockDepositoRepository,
             EntityManager entityManager) {
         super(repository, mapper, "Factura de venta");
         this.repository = repository;
@@ -64,6 +74,8 @@ public class FacturaVentaService
         this.detalleMapper = detalleMapper;
         this.medioPagoRepository = medioPagoRepository;
         this.productoRepository = productoRepository;
+        this.depositoRepository = depositoRepository;
+        this.stockDepositoRepository = stockDepositoRepository;
         this.entityManager = entityManager;
     }
 
@@ -91,6 +103,7 @@ public class FacturaVentaService
         }
         resolverReferencias(entity);
         prepararDetalles(entity);
+        ajustarStock(stockChanges(entity, 1));
         entity.recalcularTotales();
         log.info("Emitiendo factura de venta {}", entity.getNumeroFactura());
         FacturaVenta guardada = repository.saveAndFlush(entity);
@@ -100,6 +113,13 @@ public class FacturaVentaService
     @Transactional
     public FacturaVenta actualizarEstado(Long id, EstadoFacturaVenta estado) {
         FacturaVenta factura = get(id);
+        if (EstadoFacturaVenta.EMITIDA.name().equals(factura.getEstado())
+                && estado == EstadoFacturaVenta.ANULADA) {
+            ajustarStock(stockChanges(factura, -1));
+        } else if (EstadoFacturaVenta.ANULADA.name().equals(factura.getEstado())
+                && estado == EstadoFacturaVenta.EMITIDA) {
+            ajustarStock(stockChanges(factura, 1));
+        }
         factura.setEstado(estado.name());
         log.info("Actualizando estado de factura {} a {}", factura.getNumeroFactura(), estado);
         return repository.save(factura);
@@ -198,6 +218,8 @@ public class FacturaVentaService
         validarEditable(factura);
         FacturaVentaDetalle detalle = detalleMapper.toEntity(request);
         prepararDetalle(detalle);
+        ajustarStock(Map.of(new StockKey(factura.getDeposito().getId(),
+                detalle.getProducto().getId()), detalle.getCantidad()));
         factura.agregarDetalle(detalle);
         factura.recalcularTotales();
         FacturaVentaDetalle guardado = detalleRepository.save(detalle);
@@ -215,6 +237,12 @@ public class FacturaVentaService
         FacturaVentaDetalle detalle = buscarDetalle(factura, detalleId);
         FacturaVentaDetalle cambios = detalleMapper.toEntity(request);
         prepararDetalle(cambios);
+        Map<StockKey, Integer> stockChanges = new HashMap<>();
+        acumular(stockChanges, new StockKey(factura.getDeposito().getId(),
+                detalle.getProducto().getId()), -detalle.getCantidad());
+        acumular(stockChanges, new StockKey(factura.getDeposito().getId(),
+                cambios.getProducto().getId()), cambios.getCantidad());
+        ajustarStock(stockChanges);
         detalle.setProducto(cambios.getProducto());
         detalle.setCantidad(cambios.getCantidad());
         detalle.setPrecioUnitario(cambios.getPrecioUnitario());
@@ -231,6 +259,10 @@ public class FacturaVentaService
         validar(source);
         validarEditable(target);
         resolverReferencias(source);
+        prepararDetalles(source);
+        Map<StockKey, Integer> stockChanges = stockChanges(source, 1);
+        restarStockActual(stockChanges, target);
+        ajustarStock(stockChanges);
         target.setDeposito(source.getDeposito());
         target.setMedioPago(source.getMedioPago());
         target.setNumeroFactura(source.getNumeroFactura());
@@ -238,7 +270,6 @@ public class FacturaVentaService
         target.setCliente(source.getCliente());
         target.setEmpleado(source.getEmpleado());
         target.setTimbrado(source.getTimbrado());
-        prepararDetalles(source);
         if (target.getDetalles() == null) {
             target.setDetalles(new ArrayList<>());
         } else {
@@ -297,7 +328,7 @@ public class FacturaVentaService
         Long productoId = detalle.getProducto().getId();
         Producto producto = productoRepository.findById(productoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Producto", productoId));
-        if (Boolean.FALSE.equals(producto.getEstado())) {
+        if (!Boolean.TRUE.equals(producto.getEstado())) {
             throw new BusinessRuleException("El producto " + producto.getId() + " está inactivo.");
         }
         detalle.setProducto(producto);
@@ -309,7 +340,16 @@ public class FacturaVentaService
     private void resolverReferencias(FacturaVenta entity) {
         entity.setCliente(resolver(Cliente.class, entity.getCliente(), "Cliente"));
         entity.setEmpleado(resolver(Empleado.class, entity.getEmpleado(), "Empleado"));
-        entity.setDeposito(resolver(Deposito.class, entity.getDeposito(), "Depósito"));
+        if (entity.getDeposito() == null || entity.getDeposito().getId() == null) {
+            throw new IllegalArgumentException("Depósito es obligatorio.");
+        }
+        Long depositoId = entity.getDeposito().getId();
+        Deposito deposito = depositoRepository.findById(depositoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Depósito", depositoId));
+        if (!Boolean.TRUE.equals(deposito.getEstado())) {
+            throw new BusinessRuleException("El depósito está inactivo.");
+        }
+        entity.setDeposito(deposito);
         MedioPago medioPago = entity.getMedioPago();
         if (medioPago == null || medioPago.getId() == null) {
             throw new IllegalArgumentException("Medio de pago es obligatorio.");
@@ -369,5 +409,77 @@ public class FacturaVentaService
             throw new IllegalArgumentException("El precio unitario de cada detalle no puede ser negativo.");
         }
         detalle.calcularSubtotal();
+    }
+
+    private Map<StockKey, Integer> stockChanges(FacturaVenta factura, int multiplier) {
+        Map<StockKey, Integer> changes = new HashMap<>();
+        if (factura.getDetalles() != null && !factura.getDetalles().isEmpty()) {
+            Long depositoId = factura.getDeposito().getId();
+            for (FacturaVentaDetalle detalle : factura.getDetalles()) {
+                acumular(changes, new StockKey(depositoId, detalle.getProducto().getId()),
+                        multiplier * detalle.getCantidad());
+            }
+        }
+        return changes;
+    }
+
+    private void restarStockActual(Map<StockKey, Integer> changes, FacturaVenta factura) {
+        if (factura.getDetalles() == null) {
+            return;
+        }
+        Long depositoId = factura.getDeposito().getId();
+        for (FacturaVentaDetalle detalle : factura.getDetalles()) {
+            acumular(changes, new StockKey(depositoId, detalle.getProducto().getId()),
+                    -detalle.getCantidad());
+        }
+    }
+
+    private void ajustarStock(Map<StockKey, Integer> changes) {
+        var orderedChanges = changes.entrySet().stream()
+                .filter(entry -> entry.getValue() != 0)
+                .sorted(Map.Entry.comparingByKey(Comparator
+                        .comparing(StockKey::depositoId)
+                        .thenComparing(StockKey::productoId)))
+                .toList();
+
+        Map<StockKey, StockDeposito> stockRows = new HashMap<>();
+        Map<StockKey, Integer> resultingQuantities = new HashMap<>();
+        for (var entry : orderedChanges) {
+            StockKey key = entry.getKey();
+            StockDeposito stock = stockDepositoRepository
+                    .findByDeposito_IdAndProducto_Id(key.depositoId(), key.productoId())
+                    .orElseThrow(() -> new BusinessRuleException(
+                            "No hay stock registrado para el producto %d en el depósito %d."
+                                    .formatted(key.productoId(), key.depositoId())));
+            stockRows.put(key, stock);
+
+            int available = stock.getCantidad() == null ? 0 : stock.getCantidad();
+            int requestedChange = entry.getValue();
+            long resultingQuantity = (long) available - requestedChange;
+            if (requestedChange > 0 && available < requestedChange) {
+                throw new BusinessRuleException(
+                        "Stock insuficiente para el producto %d en el depósito %d: disponible %d, solicitado %d."
+                                .formatted(key.productoId(), key.depositoId(), available, requestedChange));
+            }
+            if (resultingQuantity < 0 || resultingQuantity > Integer.MAX_VALUE) {
+                throw new BusinessRuleException(
+                        "El ajuste de stock del producto %d en el depósito %d excede el rango permitido."
+                                .formatted(key.productoId(), key.depositoId()));
+            }
+            resultingQuantities.put(key, (int) resultingQuantity);
+        }
+
+        for (var entry : orderedChanges) {
+            StockDeposito stock = stockRows.get(entry.getKey());
+            stock.setCantidad(resultingQuantities.get(entry.getKey()));
+            stockDepositoRepository.save(stock);
+        }
+    }
+
+    private void acumular(Map<StockKey, Integer> changes, StockKey key, int quantity) {
+        changes.merge(key, quantity, Integer::sum);
+    }
+
+    private record StockKey(Long depositoId, Long productoId) {
     }
 }
