@@ -5,6 +5,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.validation.BindException;
+import jakarta.validation.ConstraintViolationException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -46,6 +54,39 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiErrorResponse> handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler({
+            HttpMessageNotReadableException.class,
+            MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class,
+            BindException.class,
+            ConstraintViolationException.class
+    })
+    public ResponseEntity<ApiErrorResponse> handleInvalidRequest(Exception ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "La solicitud contiene parámetros o datos inválidos.",
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodNotAllowed(
+            HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.METHOD_NOT_ALLOWED, "El método HTTP no está permitido para este recurso.",
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "El formato del cuerpo de la solicitud no está soportado.",
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotAcceptable(
+            HttpMediaTypeNotAcceptableException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.NOT_ACCEPTABLE, "No hay un formato de respuesta aceptable para el recurso.",
+                request.getRequestURI(), null);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

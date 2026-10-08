@@ -112,6 +112,9 @@ public class FacturaVentaService
 
     @Transactional
     public FacturaVenta actualizarEstado(Long id, EstadoFacturaVenta estado) {
+        if (estado == null) {
+            throw new IllegalArgumentException("El estado de la factura es obligatorio.");
+        }
         FacturaVenta factura = get(id);
         if (EstadoFacturaVenta.EMITIDA.name().equals(factura.getEstado())
                 && estado == EstadoFacturaVenta.ANULADA) {
@@ -252,6 +255,24 @@ public class FacturaVentaService
         factura.recalcularTotales();
         repository.save(factura);
         return detalleMapper.toDto(actualizado);
+    }
+
+    @Transactional
+    public void eliminarDetalle(Long facturaId, Long detalleId) {
+        FacturaVenta factura = obtenerFactura(facturaId);
+        validarEditable(factura);
+        FacturaVentaDetalle detalle = buscarDetalle(factura, detalleId);
+        if (factura.getDetalles().size() <= 1) {
+            throw new BusinessRuleException("La factura debe conservar al menos un detalle.");
+        }
+
+        StockKey stockKey = new StockKey(
+                factura.getDeposito().getId(), detalle.getProducto().getId());
+        ajustarStock(Map.of(stockKey, -detalle.getCantidad()));
+        factura.getDetalles().remove(detalle);
+        factura.recalcularTotales();
+        repository.save(factura);
+        log.info("Detalle {} eliminado de la factura {}", detalleId, facturaId);
     }
 
     @Override

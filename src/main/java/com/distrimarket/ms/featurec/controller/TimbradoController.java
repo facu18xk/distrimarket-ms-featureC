@@ -42,7 +42,6 @@ public class TimbradoController extends BaseController<TimbradoCreateDTO, Timbra
         var result = timbradoService.search(query, allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion", "numeroTimbrado",
                 "fechaInicio", "fechaVencimiento", "puntoExpedicion", "sucursal", "activo"));
-        requireResults(result, "Timbrados");
         TimbradoPageResponseDTO response = new TimbradoPageResponseDTO();
         response.setPage(result.getNumber());
         response.setSize(result.getSize());

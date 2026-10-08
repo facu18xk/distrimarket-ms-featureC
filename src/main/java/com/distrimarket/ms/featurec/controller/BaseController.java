@@ -1,14 +1,12 @@
 package com.distrimarket.ms.featurec.controller;
 
 import com.distrimarket.commons.entity.BaseEntity;
-import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.config.PageableSortSupport;
 import com.distrimarket.ms.featurec.service.BaseService;
 import com.distrimarket.ms.featurec.mapper.BaseMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -59,10 +57,4 @@ public abstract class BaseController<REQUEST_DTO, RESPONSE_DTO, E extends BaseEn
         return PageableSortSupport.allowSorts(pageable, properties);
     }
 
-    protected <T> Page<T> requireResults(Page<T> page, String resourceName) {
-        if (page.isEmpty()) {
-            throw new ResourceNotFoundException(resourceName, "coincidencias");
-        }
-        return page;
-    }
 }

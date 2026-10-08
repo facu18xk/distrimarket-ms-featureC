@@ -49,7 +49,6 @@ public class FacturaVentaController
             @RequestParam(required = false, name = "q") String query,
             Pageable pageable) {
         var result = facturaVentaService.search(query, pageable);
-        requireResults(result, "Facturas de venta");
         FacturaVentaPageResponseDTO response = new FacturaVentaPageResponseDTO();
         response.setPage(result.getNumber());
         response.setSize(result.getSize());
@@ -73,7 +72,6 @@ public class FacturaVentaController
             @RequestParam(required = false, name = "q") String query,
             Pageable pageable) {
         var result = facturaVentaService.listarDetalles(facturaId, query, pageable);
-        requireResults(result, "Detalles de factura de venta");
         FacturaVentaDetallePageResponseDTO response = new FacturaVentaDetallePageResponseDTO();
         response.setPage(result.getNumber());
         response.setSize(result.getSize());
@@ -124,6 +122,15 @@ public class FacturaVentaController
             @PathVariable Long detalleId,
             @Valid @RequestBody FacturaVentaDetalleRequestDTO request) {
         return facturaVentaService.actualizarDetalle(facturaId, detalleId, request);
+    }
+
+    @DeleteMapping("/{facturaId}/detalles/{detalleId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Eliminar detalle y reponer el stock")
+    public void eliminarDetalle(
+            @PathVariable Long facturaId,
+            @PathVariable Long detalleId) {
+        facturaVentaService.eliminarDetalle(facturaId, detalleId);
     }
 
     @PatchMapping("/{facturaId}")

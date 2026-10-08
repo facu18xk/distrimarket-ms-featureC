@@ -14,17 +14,17 @@ import java.util.List;
 @Configuration
 public class OpenApiConfig {
 
-    @Value("${server.servlet.context-path:/api/v1}")
-    private String contextPath;
+    @Value("${openapi.server-url:${server.servlet.context-path:/api/v1}}")
+    private String serverUrl;
 
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
-                .servers(List.of(new Server().url(contextPath).description("Servidor Local / Context Path")))
+                .servers(List.of(new Server().url(serverUrl).description("Servidor configurado")))
                 .info(new Info()
                         .title("Distrimarket MS Feature C - Facturación y Ventas")
                         .version("1.0.0")
-                        .description("Microservicio encargado de la gestión de clientes, timbrados, comprobantes y emisión de facturas.")
+                        .description("Microservicio encargado de clientes, timbrados y facturación. La factura vincula a cliente y depósito como entidad asociativa: cada cliente puede comprar en varios depósitos y cada depósito vender a varios clientes.")
                         .contact(new Contact().name("Equipo Distrimarket").email("soporte@distrimarket.com"))
                         .license(new License().name("Apache 2.0").url("https://springdoc.org")));
     }

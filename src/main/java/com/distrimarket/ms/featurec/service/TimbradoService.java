@@ -40,6 +40,14 @@ public class TimbradoService extends AbstractBaseService<
     }
 
     @Override
+    protected Timbrado validarActivo(Timbrado entity, Long id) {
+        if (Boolean.FALSE.equals(entity.getActivo())) {
+            throw new ResourceNotFoundException("Timbrado", id);
+        }
+        return entity;
+    }
+
+    @Override
     protected void validar(Timbrado entity) {
         super.validar(entity);
         if (entity.getNumeroTimbrado() == null || entity.getNumeroTimbrado().isBlank()) {
@@ -91,10 +99,6 @@ public class TimbradoService extends AbstractBaseService<
     @Override
     @Transactional(readOnly = true)
     public Timbrado getForRead(Long id) {
-        Timbrado timbrado = get(id);
-        if (Boolean.FALSE.equals(timbrado.getActivo())) {
-            throw new ResourceNotFoundException("Timbrado", id);
-        }
-        return timbrado;
+        return get(id);
     }
 }

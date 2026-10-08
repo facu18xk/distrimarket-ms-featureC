@@ -68,6 +68,14 @@ public class ClienteService extends AbstractBaseService<
     }
 
     @Override
+    protected Cliente validarActivo(Cliente entity, Long id) {
+        if (Boolean.FALSE.equals(entity.getEstado())) {
+            throw new ResourceNotFoundException("Cliente", id);
+        }
+        return entity;
+    }
+
+    @Override
     protected void validar(Cliente entity) {
         super.validar(entity);
         if (entity.getPersona() == null) {
@@ -120,10 +128,6 @@ public class ClienteService extends AbstractBaseService<
     @Override
     @Transactional(readOnly = true)
     public Cliente getForRead(Long id) {
-        Cliente cliente = get(id);
-        if (Boolean.FALSE.equals(cliente.getEstado())) {
-            throw new ResourceNotFoundException("Cliente", id);
-        }
-        return cliente;
+        return get(id);
     }
 }

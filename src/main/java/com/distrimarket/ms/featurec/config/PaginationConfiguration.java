@@ -17,6 +17,7 @@ public class PaginationConfiguration {
                     properties.getDefaultPageSize(),
                     Sort.by(Sort.Direction.DESC, "id")));
             resolver.setMaxPageSize(properties.getMaxPageSize());
+            resolver.setOneIndexedParameters(properties.isOneIndexedParameters());
         };
     }
 }

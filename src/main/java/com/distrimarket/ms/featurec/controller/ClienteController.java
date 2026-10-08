@@ -43,7 +43,6 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
         var result = clienteService.search(query, allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion", "estado",
                 "persona.nombreCompleto", "persona.tipoPersona", "persona.ci", "persona.ruc"));
-        requireResults(result, "Clientes");
         ClientePageResponseDTO response = new ClientePageResponseDTO();
         response.setPage(result.getNumber());
         response.setSize(result.getSize());

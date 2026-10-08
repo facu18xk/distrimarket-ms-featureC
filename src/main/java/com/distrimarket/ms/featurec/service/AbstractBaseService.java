@@ -74,6 +74,7 @@ public abstract class AbstractBaseService<
         E entity = get(id);
         copiarCambios(entity, changes);
         validar(entity);
+        log.info("Actualizando {} {}", resourceName, id);
         return repository.save(entity);
     }
 
