@@ -4,8 +4,6 @@ import com.distrimarket.commons.entity.BaseEntity;
 import com.distrimarket.ms.featurec.config.PageableSortSupport;
 import com.distrimarket.ms.featurec.service.BaseService;
 import com.distrimarket.ms.featurec.mapper.BaseMapper;
-import io.swagger.v3.oas.annotations.Operation;
-import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,19 +29,18 @@ public abstract class BaseController<REQUEST_DTO, RESPONSE_DTO, E extends BaseEn
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Obtener un recurso por ID")
     public RESPONSE_DTO get(@PathVariable Long id) {
         return mapper.toDto(service.getForRead(id));
     }
 
     @PostMapping
-    public ResponseEntity<RESPONSE_DTO> create(@Valid @RequestBody REQUEST_DTO request) {
+    public ResponseEntity<RESPONSE_DTO> create(@RequestBody REQUEST_DTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(mapper.toDto(service.create(mapper.toEntity(request))));
     }
 
     @PutMapping("/{id}")
-    public RESPONSE_DTO update(@PathVariable Long id, @Valid @RequestBody REQUEST_DTO request) {
+    public RESPONSE_DTO update(@PathVariable Long id, @RequestBody REQUEST_DTO request) {
         return mapper.toDto(service.update(id, mapper.toEntity(request)));
     }
 

@@ -3,7 +3,6 @@ package com.distrimarket.ms.featurec.service;
 import com.distrimarket.commons.entity.FacturaVenta;
 import com.distrimarket.commons.entity.FacturaVentaDetalle;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
-import com.distrimarket.commons.dto.FacturaVentaDetalleResponseDTO;
 import com.distrimarket.commons.entity.BaseEntity;
 import com.distrimarket.commons.entity.Cliente;
 import com.distrimarket.commons.entity.Deposito;
@@ -15,21 +14,19 @@ import com.distrimarket.commons.entity.Timbrado;
 import com.distrimarket.commons.dto.EstadoFacturaVenta;
 import com.distrimarket.ms.featurec.config.PageableSortSupport;
 import com.distrimarket.ms.featurec.config.SearchQuerySupport;
-import com.distrimarket.commons.dto.FacturaVentaDetalleRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
 import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
-import com.distrimarket.ms.featurec.mapper.FacturaVentaDetalleMapper;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
 import com.distrimarket.ms.featurec.repository.DepositoRepository;
-import com.distrimarket.ms.featurec.repository.FacturaVentaDetalleRepository;
 import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.repository.MedioPagoRepository;
 import com.distrimarket.ms.featurec.repository.ProductoRepository;
 import com.distrimarket.ms.featurec.repository.StockDepositoRepository;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -38,10 +35,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class FacturaVentaService
@@ -50,8 +54,6 @@ public class FacturaVentaService
         FacturaVentaRepository, FacturaVentaMapper> {
 
     private final FacturaVentaRepository repository;
-    private final FacturaVentaDetalleRepository detalleRepository;
-    private final FacturaVentaDetalleMapper detalleMapper;
     private final MedioPagoRepository medioPagoRepository;
     private final ProductoRepository productoRepository;
     private final DepositoRepository depositoRepository;
@@ -60,9 +62,7 @@ public class FacturaVentaService
 
     public FacturaVentaService(
             FacturaVentaRepository repository,
-            FacturaVentaDetalleRepository detalleRepository,
             FacturaVentaMapper mapper,
-            FacturaVentaDetalleMapper detalleMapper,
             MedioPagoRepository medioPagoRepository,
             ProductoRepository productoRepository,
             DepositoRepository depositoRepository,
@@ -70,8 +70,6 @@ public class FacturaVentaService
             EntityManager entityManager) {
         super(repository, mapper, "Factura de venta");
         this.repository = repository;
-        this.detalleRepository = detalleRepository;
-        this.detalleMapper = detalleMapper;
         this.medioPagoRepository = medioPagoRepository;
         this.productoRepository = productoRepository;
         this.depositoRepository = depositoRepository;
@@ -110,6 +108,16 @@ public class FacturaVentaService
         return repository.findDetailedById(guardada.getId()).orElse(guardada);
     }
 
+    @Override
+    @Transactional
+    public FacturaVenta update(Long id, FacturaVenta changes) {
+        FacturaVenta invoice = get(id);
+        copiarCambios(invoice, changes);
+        validar(invoice);
+        repository.saveAndFlush(invoice);
+        return repository.findDetailedById(id).orElse(invoice);
+    }
+
     @Transactional
     public FacturaVenta actualizarEstado(Long id, EstadoFacturaVenta estado) {
         if (estado == null) {
@@ -126,25 +134,6 @@ public class FacturaVentaService
         factura.setEstado(estado.name());
         log.info("Actualizando estado de factura {} a {}", factura.getNumeroFactura(), estado);
         return repository.save(factura);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<FacturaVentaDetalleResponseDTO> listarDetalles(
-            Long facturaId,
-            String query,
-            Pageable pageable) {
-        obtenerFactura(facturaId);
-        Specification<FacturaVentaDetalle> specification = (root, criteriaQuery, criteriaBuilder) ->
-                criteriaBuilder.equal(root.get("facturaVenta").get("id"), facturaId);
-        if (query != null && !query.isBlank()) {
-            String pattern = "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
-            specification = specification.and((root, criteriaQuery, builder) ->
-                    builder.like(builder.lower(root.get("producto").get("nombre")), pattern));
-        }
-        Pageable sortedPageable = PageableSortSupport.allowSorts(pageable,
-                "id", "fechaCreacion", "fechaModificacion",
-                "cantidad", "precioUnitario", "porcentajeIva", "subtotal");
-        return detalleRepository.findAll(specification, sortedPageable).map(detalleMapper::toDto);
     }
 
     @Transactional(readOnly = true)
@@ -196,83 +185,27 @@ public class FacturaVentaService
         Pageable sortedPageable = PageableSortSupport.allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion",
                 "numeroFactura", "fechaEmision", "estado", "totalIva", "totalGeneral");
-        return search(specification, sortedPageable);
-    }
-
-    @Transactional(readOnly = true)
-    public FacturaVentaDetalleResponseDTO obtenerDetalle(Long facturaId, Long detalleId) {
-        FacturaVenta factura = obtenerFactura(facturaId);
-        return detalleMapper.toDto(buscarDetalle(factura, detalleId));
-    }
-
-    private FacturaVentaDetalle buscarDetalle(FacturaVenta factura, Long detalleId) {
-        validarId(detalleId);
-        FacturaVentaDetalle detalle = detalleRepository.findById(detalleId)
-                .orElseThrow(() -> new ResourceNotFoundException("Detalle de factura de venta", detalleId));
-        if (!factura.getId().equals(detalle.getFacturaVenta().getId())) {
-            throw new ResourceNotFoundException("Detalle de factura de venta", detalleId);
-        }
-        return detalle;
-    }
-
-    @Transactional
-    public FacturaVentaDetalleResponseDTO agregarDetalle(Long facturaId, FacturaVentaDetalleRequestDTO request) {
-        FacturaVenta factura = obtenerFactura(facturaId);
-        validarEditable(factura);
-        FacturaVentaDetalle detalle = detalleMapper.toEntity(request);
-        prepararDetalle(detalle);
-        ajustarStock(Map.of(new StockKey(factura.getDeposito().getId(),
-                detalle.getProducto().getId()), detalle.getCantidad()));
-        factura.agregarDetalle(detalle);
-        factura.recalcularTotales();
-        FacturaVentaDetalle guardado = detalleRepository.save(detalle);
-        repository.save(factura);
-        return detalleMapper.toDto(guardado);
-    }
-
-    @Transactional
-    public FacturaVentaDetalleResponseDTO actualizarDetalle(
-            Long facturaId,
-            Long detalleId,
-            FacturaVentaDetalleRequestDTO request) {
-        FacturaVenta factura = obtenerFactura(facturaId);
-        validarEditable(factura);
-        FacturaVentaDetalle detalle = buscarDetalle(factura, detalleId);
-        FacturaVentaDetalle cambios = detalleMapper.toEntity(request);
-        prepararDetalle(cambios);
-        Map<StockKey, Integer> stockChanges = new HashMap<>();
-        acumular(stockChanges, new StockKey(factura.getDeposito().getId(),
-                detalle.getProducto().getId()), -detalle.getCantidad());
-        acumular(stockChanges, new StockKey(factura.getDeposito().getId(),
-                cambios.getProducto().getId()), cambios.getCantidad());
-        ajustarStock(stockChanges);
-        detalle.setProducto(cambios.getProducto());
-        detalle.setCantidad(cambios.getCantidad());
-        detalle.setPrecioUnitario(cambios.getPrecioUnitario());
-        detalle.setPorcentajeIva(cambios.getPorcentajeIva());
-        detalle.calcularSubtotal();
-        FacturaVentaDetalle actualizado = detalleRepository.save(detalle);
-        factura.recalcularTotales();
-        repository.save(factura);
-        return detalleMapper.toDto(actualizado);
-    }
-
-    @Transactional
-    public void eliminarDetalle(Long facturaId, Long detalleId) {
-        FacturaVenta factura = obtenerFactura(facturaId);
-        validarEditable(factura);
-        FacturaVentaDetalle detalle = buscarDetalle(factura, detalleId);
-        if (factura.getDetalles().size() <= 1) {
-            throw new BusinessRuleException("La factura debe conservar al menos un detalle.");
+        Page<FacturaVenta> headers = search(specification, sortedPageable);
+        if (headers.isEmpty()) {
+            return headers;
         }
 
-        StockKey stockKey = new StockKey(
-                factura.getDeposito().getId(), detalle.getProducto().getId());
-        ajustarStock(Map.of(stockKey, -detalle.getCantidad()));
-        factura.getDetalles().remove(detalle);
-        factura.recalcularTotales();
-        repository.save(factura);
-        log.info("Detalle {} eliminado de la factura {}", detalleId, facturaId);
+        var invoiceIds = headers.getContent().stream()
+                .map(FacturaVenta::getId)
+                .toList();
+        Map<Long, FacturaVenta> detailedById = repository.findDetailedByIdIn(invoiceIds).stream()
+                .collect(Collectors.toMap(FacturaVenta::getId, Function.identity()));
+        var detailedContent = headers.getContent().stream()
+                .map(header -> {
+                    FacturaVenta detailed = detailedById.get(header.getId());
+                    if (detailed == null) {
+                        throw new IllegalStateException(
+                                "No se pudieron cargar los detalles de la factura " + header.getId() + ".");
+                    }
+                    return detailed;
+                })
+                .toList();
+        return new PageImpl<>(detailedContent, headers.getPageable(), headers.getTotalElements());
     }
 
     @Override
@@ -284,6 +217,33 @@ public class FacturaVentaService
         Map<StockKey, Integer> stockChanges = stockChanges(source, 1);
         restarStockActual(stockChanges, target);
         ajustarStock(stockChanges);
+
+        Map<Long, Deque<FacturaVentaDetalle>> existingByProduct = new HashMap<>();
+        for (FacturaVentaDetalle detalle : target.getDetalles()) {
+            existingByProduct.computeIfAbsent(detalle.getProducto().getId(), ignored -> new ArrayDeque<>())
+                    .addLast(detalle);
+        }
+        Set<FacturaVentaDetalle> retainedDetails =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        var newDetails = new ArrayList<FacturaVentaDetalle>();
+        for (FacturaVentaDetalle requested : source.getDetalles()) {
+            Deque<FacturaVentaDetalle> candidates = existingByProduct.get(requested.getProducto().getId());
+            FacturaVentaDetalle current = candidates == null ? null : candidates.pollFirst();
+            if (current == null) {
+                newDetails.add(requested);
+                continue;
+            }
+            current.setCantidad(requested.getCantidad());
+            current.setPrecioUnitario(requested.getPrecioUnitario());
+            current.setPorcentajeIva(requested.getPorcentajeIva());
+            current.calcularSubtotal();
+            retainedDetails.add(current);
+        }
+        target.getDetalles().removeIf(detalle -> !retainedDetails.contains(detalle));
+        for (FacturaVentaDetalle detail : newDetails) {
+            target.agregarDetalle(detail);
+        }
+
         target.setDeposito(source.getDeposito());
         target.setMedioPago(source.getMedioPago());
         target.setNumeroFactura(source.getNumeroFactura());
@@ -291,18 +251,20 @@ public class FacturaVentaService
         target.setCliente(source.getCliente());
         target.setEmpleado(source.getEmpleado());
         target.setTimbrado(source.getTimbrado());
-        if (target.getDetalles() == null) {
-            target.setDetalles(new ArrayList<>());
-        } else {
-            target.getDetalles().clear();
-        }
-        if (source.getDetalles() != null) {
-            target.getDetalles().addAll(source.getDetalles());
-            for (FacturaVentaDetalle detalle : target.getDetalles()) {
-                detalle.setFacturaVenta(target);
-            }
-        }
         target.recalcularTotales();
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        FacturaVenta factura = get(id);
+        if ("EMITIDA".equalsIgnoreCase(factura.getEstado())) {
+            ajustarStock(stockChanges(factura, -1));
+            factura.setEstado(EstadoFacturaVenta.ANULADA.name());
+        }
+        factura.setActivo(false);
+        repository.save(factura);
+        log.info("Factura de venta {} marcada como inactiva; sus detalles se conservan", id);
     }
 
     @Override
@@ -321,17 +283,26 @@ public class FacturaVentaService
         if (entity.getNumeroFactura() == null || entity.getNumeroFactura().isBlank()) {
             throw new IllegalArgumentException("El número de factura es obligatorio.");
         }
+        String numeroFactura = entity.getNumeroFactura().trim();
+        if (numeroFactura.length() > 50) {
+            throw new IllegalArgumentException("El número de factura no puede superar 50 caracteres.");
+        }
+        entity.setNumeroFactura(numeroFactura);
         if (entity.getFechaEmision() == null) {
             entity.setFechaEmision(LocalDate.now());
         }
         if (entity.getDetalles() == null || entity.getDetalles().isEmpty()) {
             throw new BusinessRuleException("La factura debe contener al menos un detalle.");
         }
-        if ("ANULADA".equalsIgnoreCase(entity.getEstado())) {
-            throw new IllegalArgumentException("No se puede emitir una factura anulada.");
-        }
         if (entity.getEstado() == null) {
-            entity.setEstado("EMITIDA");
+            entity.setEstado(EstadoFacturaVenta.EMITIDA.name());
+        } else {
+            String estado = entity.getEstado().trim().toUpperCase(Locale.ROOT);
+            if (!EstadoFacturaVenta.EMITIDA.name().equals(estado)) {
+                throw new IllegalArgumentException(
+                        "Una factura debe emitirse como EMITIDA; para anularla, use la operación de estado.");
+            }
+            entity.setEstado(estado);
         }
     }
 
@@ -378,13 +349,13 @@ public class FacturaVentaService
         entity.setMedioPago(medioPagoRepository.findById(medioPago.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Medio de pago", medioPago.getId())));
         entity.setTimbrado(resolver(Timbrado.class, entity.getTimbrado(), "Timbrado"));
-        if (Boolean.FALSE.equals(entity.getCliente().getEstado())) {
+        if (!Boolean.TRUE.equals(entity.getCliente().getEstado())) {
             throw new BusinessRuleException("El cliente está inactivo.");
         }
-        if (Boolean.FALSE.equals(entity.getMedioPago().getActivo())) {
+        if (!Boolean.TRUE.equals(entity.getMedioPago().getActivo())) {
             throw new BusinessRuleException("El medio de pago está inactivo.");
         }
-        if (Boolean.FALSE.equals(entity.getTimbrado().getActivo())) {
+        if (!Boolean.TRUE.equals(entity.getTimbrado().getActivo())) {
             throw new BusinessRuleException("El timbrado está inactivo.");
         }
         if (entity.getTimbrado().getFechaInicio() != null
@@ -409,13 +380,6 @@ public class FacturaVentaService
         return resolved;
     }
 
-    private FacturaVenta obtenerFactura(Long facturaId) {
-        validarId(facturaId);
-        FacturaVenta factura = repository.findById(facturaId)
-                .orElseThrow(() -> new ResourceNotFoundException("Factura de venta", facturaId));
-        return validarActivo(factura, facturaId);
-    }
-
     private void validarDetalle(FacturaVentaDetalle detalle) {
         if (detalle == null) {
             throw new IllegalArgumentException("La factura no puede contener detalles nulos.");
@@ -428,6 +392,9 @@ public class FacturaVentaService
         }
         if (detalle.getPrecioUnitario() == null || detalle.getPrecioUnitario().signum() < 0) {
             throw new IllegalArgumentException("El precio unitario de cada detalle no puede ser negativo.");
+        }
+        if (detalle.getPorcentajeIva() == null || detalle.getPorcentajeIva().signum() < 0) {
+            throw new IllegalArgumentException("El porcentaje de IVA de cada detalle no puede ser negativo.");
         }
         detalle.calcularSubtotal();
     }
@@ -498,7 +465,12 @@ public class FacturaVentaService
     }
 
     private void acumular(Map<StockKey, Integer> changes, StockKey key, int quantity) {
-        changes.merge(key, quantity, Integer::sum);
+        try {
+            changes.merge(key, quantity, Math::addExact);
+        } catch (ArithmeticException exception) {
+            throw new BusinessRuleException(
+                    "La cantidad total del producto %d excede el rango permitido.".formatted(key.productoId()));
+        }
     }
 
     private record StockKey(Long depositoId, Long productoId) {

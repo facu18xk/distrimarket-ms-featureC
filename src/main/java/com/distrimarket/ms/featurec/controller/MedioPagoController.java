@@ -1,16 +1,14 @@
 package com.distrimarket.ms.featurec.controller;
 
-import com.distrimarket.commons.entity.Timbrado;
-import com.distrimarket.commons.dto.TimbradoPageResponseDTO;
-import com.distrimarket.commons.dto.TimbradoCreateDTO;
-import com.distrimarket.commons.dto.TimbradoDTO;
-import com.distrimarket.ms.featurec.service.TimbradoService;
-import com.distrimarket.ms.featurec.mapper.TimbradoMapper;
+import com.distrimarket.commons.dto.MedioPagoDTO;
+import com.distrimarket.commons.dto.PageResponseDTO;
+import com.distrimarket.commons.entity.MedioPago;
+import com.distrimarket.ms.featurec.mapper.MedioPagoMapper;
+import com.distrimarket.ms.featurec.service.MedioPagoService;
 import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,54 +26,46 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/timbrados")
-@Tag(name = "Timbrados")
-public class TimbradoController extends BaseController<TimbradoCreateDTO, TimbradoDTO, Timbrado> {
-    private final TimbradoService timbradoService;
+@RequestMapping("/medios-pago")
+@Tag(name = "Medios de pago")
+public class MedioPagoController extends BaseController<MedioPagoDTO, MedioPagoDTO, MedioPago> {
 
-    public TimbradoController(TimbradoService service, TimbradoMapper mapper) {
+    private final MedioPagoService medioPagoService;
+
+    public MedioPagoController(MedioPagoService service, MedioPagoMapper mapper) {
         super(service, mapper);
-        this.timbradoService = service;
+        this.medioPagoService = service;
     }
 
     @GetMapping
-    @Operation(operationId = "listTimbrados")
-    public TimbradoPageResponseDTO listar(
+    @Operation(operationId = "listMediosPago")
+    public PageResponseDTO<MedioPagoDTO> listar(
             @RequestBody(required = false) Map<String, Object> filter,
             @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
             @Parameter(hidden = true) Pageable pageable) {
         String query = SearchFilterSupport.query(filter, legacyQuery);
-        var result = timbradoService.search(query, allowSorts(pageable,
-                "id", "fechaCreacion", "fechaModificacion", "numeroTimbrado",
-                "fechaInicio", "fechaVencimiento", "puntoExpedicion", "sucursal", "activo"));
-        TimbradoPageResponseDTO response = new TimbradoPageResponseDTO();
-        response.setPageNumber(result.getNumber());
-        response.setPageSize(result.getSize());
-        response.setTotalElements(result.getTotalElements());
-        response.setTotalPages(result.getTotalPages());
-        response.setIsFirst(result.isFirst());
-        response.setIsLast(result.isLast());
-        response.setContent(result.map(mapper()::toDto).getContent());
-        return response;
+        var result = medioPagoService.search(query, allowSorts(pageable,
+                "id", "nombre", "activo", "fechaCreacion", "fechaModificacion"));
+        return PageResponseDTO.from(result.map(mapper()::toDto));
     }
 
     @Override
     @GetMapping("/{id}")
-    public TimbradoDTO get(@PathVariable Long id) {
+    public MedioPagoDTO get(@PathVariable Long id) {
         return super.get(id);
     }
 
     @Override
     @PostMapping
-    public ResponseEntity<TimbradoDTO> create(@Valid @RequestBody TimbradoCreateDTO request) {
+    public ResponseEntity<MedioPagoDTO> create(@RequestBody MedioPagoDTO request) {
         return super.create(request);
     }
 
     @Override
     @PutMapping("/{id}")
-    public TimbradoDTO update(
+    public MedioPagoDTO update(
             @PathVariable Long id,
-            @Valid @RequestBody TimbradoCreateDTO request) {
+            @RequestBody MedioPagoDTO request) {
         return super.update(id, request);
     }
 

@@ -14,13 +14,9 @@ public interface ClienteMapper extends BaseMapper<ClienteRequestDTO, ClienteResp
     @Mapping(source = "persona", target = "persona")
     ClienteResponseDTO toDto(Cliente entity);
 
-    @Mapping(source = "idPersona", target = "id")
-    Persona toPersona(PersonaDTO dto);
+    Persona toPersona(PersonaRequestDTO dto);
 
-    Persona toPersona(PersonaCreateDTO dto);
-
-    @Mapping(source = "id", target = "idPersona")
-    PersonaDTO toPersonaDto(Persona entity);
+    PersonaResponseDTO toPersonaResponse(Persona entity);
 
     @Override
     Cliente toEntity(ClienteRequestDTO request);

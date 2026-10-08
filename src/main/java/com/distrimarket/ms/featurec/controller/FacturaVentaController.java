@@ -1,16 +1,15 @@
 package com.distrimarket.ms.featurec.controller;
 
 import com.distrimarket.commons.entity.FacturaVenta;
-import com.distrimarket.commons.dto.FacturaVentaDetalleResponseDTO;
-import com.distrimarket.commons.dto.FacturaVentaDetallePageResponseDTO;
-import com.distrimarket.commons.dto.FacturaVentaDetalleRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaEstadoRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaPageResponseDTO;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
 import com.distrimarket.ms.featurec.service.FacturaVentaService;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
+import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +27,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/facturas-venta")
 @Tag(name = "Facturas-Venta")
@@ -35,116 +36,70 @@ public class FacturaVentaController
         extends BaseController<FacturaVentaRequestDTO, FacturaVentaResponseDTO, FacturaVenta> {
 
     private final FacturaVentaService facturaVentaService;
+    private final FacturaVentaMapper facturaVentaMapper;
 
     public FacturaVentaController(
             FacturaVentaService service,
             FacturaVentaMapper mapper) {
         super(service, mapper);
         this.facturaVentaService = service;
+        this.facturaVentaMapper = mapper;
     }
 
     @GetMapping
-    @Operation(operationId = "listFacturasVenta", summary = "Listar facturas de venta")
+    @Operation(operationId = "listFacturasVenta")
     public FacturaVentaPageResponseDTO listar(
-            @RequestParam(required = false, name = "q") String query,
-            Pageable pageable) {
+            @RequestBody(required = false) Map<String, Object> filter,
+            @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
+            @Parameter(hidden = true) Pageable pageable) {
+        String query = SearchFilterSupport.query(filter, legacyQuery);
         var result = facturaVentaService.search(query, pageable);
         FacturaVentaPageResponseDTO response = new FacturaVentaPageResponseDTO();
-        response.setPage(result.getNumber());
-        response.setSize(result.getSize());
+        response.setPageNumber(result.getNumber());
+        response.setPageSize(result.getSize());
         response.setTotalElements(result.getTotalElements());
         response.setTotalPages(result.getTotalPages());
-        response.setContent(result.map(mapper()::toDto).getContent());
+        response.setIsFirst(result.isFirst());
+        response.setIsLast(result.isLast());
+        response.setContent(result.map(facturaVentaMapper::toDto).getContent());
         return response;
     }
 
     @Override
     @GetMapping("/{id}")
-    @Operation(summary = "Obtener factura")
     public FacturaVentaResponseDTO get(@PathVariable Long id) {
         return super.get(id);
     }
 
-    @GetMapping("/{facturaId}/detalles")
-    @Operation(summary = "Listar detalles de una factura de venta")
-    public FacturaVentaDetallePageResponseDTO listarDetalles(
-            @PathVariable("facturaId") Long facturaId,
-            @RequestParam(required = false, name = "q") String query,
-            Pageable pageable) {
-        var result = facturaVentaService.listarDetalles(facturaId, query, pageable);
-        FacturaVentaDetallePageResponseDTO response = new FacturaVentaDetallePageResponseDTO();
-        response.setPage(result.getNumber());
-        response.setSize(result.getSize());
-        response.setTotalElements(result.getTotalElements());
-        response.setTotalPages(result.getTotalPages());
-        response.setContent(result.getContent());
-        return response;
-    }
-
-    @GetMapping("/{facturaId}/detalles/{detalleId}")
-    @Operation(summary = "Obtener un detalle de una factura de venta")
-    public FacturaVentaDetalleResponseDTO obtenerDetalle(
-            @PathVariable Long facturaId,
-            @PathVariable Long detalleId) {
-        return facturaVentaService.obtenerDetalle(facturaId, detalleId);
-    }
-
     @Override
     @PostMapping
-    @Operation(summary = "Crear cabecera y detalles")
     public ResponseEntity<FacturaVentaResponseDTO> create(
             @Valid @RequestBody FacturaVentaRequestDTO request) {
         return super.create(request);
     }
 
-    @PostMapping("/{facturaId}/detalles")
-    @Operation(summary = "Agregar detalle")
-    public ResponseEntity<FacturaVentaDetalleResponseDTO> agregarDetalle(
-            @PathVariable Long facturaId,
-            @Valid @RequestBody FacturaVentaDetalleRequestDTO request) {
-        FacturaVentaDetalleResponseDTO detalle = facturaVentaService.agregarDetalle(facturaId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(detalle);
-    }
-
     @Override
     @PutMapping("/{id}")
-    @Operation(summary = "Actualizar cabecera y detalles")
+    @Operation(
+            description = "Reemplaza la colección completa de detalles. Las líneas existentes se reconocen por producto y orden de aparición; las omitidas se quitan y ajustan el stock.")
     public FacturaVentaResponseDTO update(
             @PathVariable Long id,
             @Valid @RequestBody FacturaVentaRequestDTO request) {
         return super.update(id, request);
     }
 
-    @PutMapping("/{facturaId}/detalles/{detalleId}")
-    @Operation(summary = "Actualizar detalle")
-    public FacturaVentaDetalleResponseDTO actualizarDetalle(
-            @PathVariable Long facturaId,
-            @PathVariable Long detalleId,
-            @Valid @RequestBody FacturaVentaDetalleRequestDTO request) {
-        return facturaVentaService.actualizarDetalle(facturaId, detalleId, request);
-    }
-
-    @DeleteMapping("/{facturaId}/detalles/{detalleId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Eliminar detalle y reponer el stock")
-    public void eliminarDetalle(
-            @PathVariable Long facturaId,
-            @PathVariable Long detalleId) {
-        facturaVentaService.eliminarDetalle(facturaId, detalleId);
-    }
-
     @PatchMapping("/{facturaId}")
-    @Operation(summary = "Actualizar estado de cabecera")
     public FacturaVentaResponseDTO actualizarEstado(
             @PathVariable Long facturaId,
             @Valid @RequestBody FacturaVentaEstadoRequestDTO request) {
-        return mapper().toDto(facturaVentaService.actualizarEstado(facturaId, request.getEstado()));
+        return facturaVentaMapper.toDto(facturaVentaService.actualizarEstado(facturaId, request.getEstado()));
     }
 
     @Override
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Eliminar cabecera")
+    @Operation(
+            description = "Conserva sus detalles y repone el stock cuando la factura estaba emitida.")
     public void delete(@PathVariable Long id) {
         super.delete(id);
     }

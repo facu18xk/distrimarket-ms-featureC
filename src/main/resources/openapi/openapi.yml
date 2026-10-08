@@ -3,32 +3,25 @@ info:
   title: DistriMarket API - Ventas
   version: 1.0.0
 servers:
-  - url: http://{host}/{basePath}
-    variables:
-      host:
-        default: localhost:8082
-      basePath:
-        default: api/v1
+  - url: http://localhost:8082/ventas
 tags:
   - name: Clientes
   - name: Timbrados
+  - name: Medios de pago
   - name: Facturas-Venta
-    description: La factura es la entidad asociativa que vincula clientes con depósitos y mantiene los detalles de productos vendidos.
 paths:
   /clientes:
     get:
       tags: [Clientes]
       operationId: listClientes
-      summary: Listar clientes
-      parameters:
-        - name: q
-          in: query
-          description: Busca por nombre, documento, teléfono, correo, ID o fecha de creación/modificación (yyyy-MM-dd, d/M/yyyy o d-M-yyyy).
-          schema:
-            type: string
-        - $ref: '#/components/parameters/PageQuery'
-        - $ref: '#/components/parameters/SizeQuery'
-        - $ref: '#/components/parameters/SortQuery'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
       responses:
         '200':
           description: Clientes paginados
@@ -58,7 +51,6 @@ paths:
     get:
       tags: [Clientes]
       operationId: getCliente
-      summary: Obtener cliente por ID
       responses:
         '200':
           description: Cliente encontrado
@@ -98,16 +90,14 @@ paths:
     get:
       tags: [Timbrados]
       operationId: listTimbrados
-      summary: Listar timbrados
-      parameters:
-        - name: q
-          in: query
-          description: Busca por número, sucursal, punto de expedición, ID o fechas de vigencia (yyyy-MM-dd, d/M/yyyy o d-M-yyyy).
-          schema:
-            type: string
-        - $ref: '#/components/parameters/PageQuery'
-        - $ref: '#/components/parameters/SizeQuery'
-        - $ref: '#/components/parameters/SortQuery'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
       responses:
         '200':
           description: Timbrados paginados
@@ -137,7 +127,6 @@ paths:
     get:
       tags: [Timbrados]
       operationId: getTimbrado
-      summary: Obtener timbrado por ID
       responses:
         '200':
           description: Timbrado encontrado
@@ -173,23 +162,101 @@ paths:
           description: Timbrado desactivado
         '404':
           $ref: '#/components/responses/NotFound'
+  /medios-pago:
+    get:
+      tags: [Medios de pago]
+      operationId: listMediosPago
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
+      responses:
+        '200':
+          description: Medios de pago activos paginados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageMedioPago'
+    post:
+      tags: [Medios de pago]
+      operationId: createMedioPago
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedioPagoRequest'
+      responses:
+        '201':
+          description: Medio de pago creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '409':
+          description: Ya existe un medio de pago con ese nombre
+  /medios-pago/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Medios de pago]
+      operationId: getMedioPago
+      responses:
+        '200':
+          description: Medio de pago encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Medios de pago]
+      operationId: updateMedioPago
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedioPagoRequest'
+      responses:
+        '200':
+          description: Medio de pago actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedioPago'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Ya existe un medio de pago con ese nombre
+    delete:
+      tags: [Medios de pago]
+      operationId: deleteMedioPago
+      responses:
+        '204':
+          description: Medio de pago desactivado
+        '404':
+          $ref: '#/components/responses/NotFound'
   /facturas-venta:
     get:
       tags: [Facturas-Venta]
       operationId: listFacturasVenta
-      summary: Listar facturas de venta
-      parameters:
-        - name: q
-          in: query
-          description: Busca por cualquier fragmento del número (también sin separadores), estado, cliente, ID o fecha de emisión (yyyy-MM-dd, d/M/yyyy o d-M-yyyy).
-          schema:
-            type: string
-        - $ref: '#/components/parameters/PageQuery'
-        - $ref: '#/components/parameters/SizeQuery'
-        - $ref: '#/components/parameters/SortQuery'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                q:
+                  type: string
       responses:
         '200':
-          description: Facturas paginadas
+          description: Facturas paginadas con cabecera y detalles.
           content:
             application/json:
               schema:
@@ -197,7 +264,6 @@ paths:
     post:
       tags: [Facturas-Venta]
       operationId: createFacturaVenta
-      summary: Cabecera
       requestBody:
         required: true
         content:
@@ -223,7 +289,6 @@ paths:
     get:
       tags: [Facturas-Venta]
       operationId: getFacturaVenta
-      summary: Obtener factura con sus detalles
       responses:
         '200':
           description: Factura encontrada
@@ -236,7 +301,6 @@ paths:
     put:
       tags: [Facturas-Venta]
       operationId: updateFacturaVenta
-      summary: Cabecera
       requestBody:
         required: true
         content:
@@ -261,7 +325,6 @@ paths:
     patch:
       tags: [Facturas-Venta]
       operationId: updateEstadoFacturaVenta
-      summary: Cabecera
       requestBody:
         required: true
         content:
@@ -290,146 +353,16 @@ paths:
     delete:
       tags: [Facturas-Venta]
       operationId: deleteFacturaVenta
-      summary: Eliminar lógicamente la factura
+      description: Marca la cabecera como inactiva, conserva sus detalles y repone el stock si la factura estaba emitida.
       responses:
         '204':
-          description: Factura marcada como inactiva
+          description: Factura marcada como inactiva; los detalles se conservan
         '404':
           $ref: '#/components/responses/NotFound'
-  /facturas-venta/{facturaId}/detalles:
-    parameters:
-      - $ref: '#/components/parameters/FacturaIdPath'
-    get:
-      tags: [Facturas-Venta]
-      operationId: listDetallesFacturaVenta
-      summary: Listar detalles de una factura
-      parameters:
-        - name: q
-          in: query
-          description: Busca por nombre de producto dentro de la factura. Si no hay coincidencias devuelve contenido vacío.
-          schema:
-            type: string
-        - $ref: '#/components/parameters/PageQuery'
-        - $ref: '#/components/parameters/SizeQuery'
-        - $ref: '#/components/parameters/SortQuery'
-      responses:
-        '200':
-          description: Detalles paginados
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PageFacturaVentaDetalle'
-        '404':
-          description: La factura no existe o está inactiva
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-    post:
-      tags: [Facturas-Venta]
-      operationId: addDetalleFacturaVenta
-      summary: Detalle
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FacturaVentaDetalleRequest'
-      responses:
-        '201':
-          description: Detalle agregado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FacturaVentaDetalleResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          description: Stock insuficiente para el producto en el depósito
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-  /facturas-venta/{facturaId}/detalles/{detalleId}:
-    parameters:
-      - $ref: '#/components/parameters/FacturaIdPath'
-      - $ref: '#/components/parameters/DetalleIdPath'
-    get:
-      tags: [Facturas-Venta]
-      operationId: getDetalleFacturaVenta
-      summary: Obtener un detalle de una factura
-      responses:
-        '200':
-          description: Detalle encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FacturaVentaDetalleResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      tags: [Facturas-Venta]
-      operationId: updateDetalleFacturaVenta
-      summary: Detalle
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FacturaVentaDetalleRequest'
-      responses:
-        '200':
-          description: Detalle actualizado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FacturaVentaDetalleResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          description: Stock insuficiente para el producto en el depósito
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-    delete:
-      tags: [Facturas-Venta]
-      operationId: deleteDetalleFacturaVenta
-      summary: Eliminar detalle y reponer el stock
-      description: No permite eliminar el último detalle de una factura ni modificar una factura anulada.
-      responses:
-        '204':
-          description: Detalle eliminado y stock repuesto
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: La factura está anulada y no admite cambios
-        '422':
-          description: La factura debe conservar al menos un detalle
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
 components:
   parameters:
     IdPath:
       name: id
-      in: path
-      required: true
-      schema:
-        type: integer
-        format: int64
-        minimum: 1
-    FacturaIdPath:
-      name: facturaId
-      in: path
-      required: true
-      schema:
-        type: integer
-        format: int64
-        minimum: 1
-    DetalleIdPath:
-      name: detalleId
       in: path
       required: true
       schema:
@@ -521,6 +454,12 @@ components:
     Persona:
       allOf:
         - $ref: '#/components/schemas/PersonaCreate'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
+              format: int64
       description: Datos de la persona asociados al cliente.
     ClienteRequest:
       type: object
@@ -587,7 +526,38 @@ components:
           maxLength: 50
         activo:
           type: boolean
+    MedioPagoRequest:
+      type: object
+      required: [nombre]
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 50
+    PageMedioPago:
+      type: object
+      required: [contenido, numeroPagina, tamanio, totalElementos, totalPaginas, primera, ultima]
+      properties:
+        contenido:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedioPago'
+        numeroPagina:
+          type: integer
+          description: Índice de página comenzando en cero.
+        tamanio:
+          type: integer
+        totalElementos:
+          type: integer
+          format: int64
+        totalPaginas:
+          type: integer
+        primera:
+          type: boolean
+        ultima:
+          type: boolean
     FacturaVentaRequest:
+      description: Para PUT se envía la lista completa de detalles. Las líneas se emparejan por producto y orden; las omitidas se eliminan de la factura y ajustan el stock.
       type: object
       required: [numeroFactura, idCliente, idEmpleado, idDeposito, idMedioPago, idTimbrado, detalles]
       properties:
@@ -695,73 +665,67 @@ components:
           type: number
     PageCliente:
       type: object
-      required: [page, size, totalElements, totalPages, content]
+      required: [pageNumber, pageSize, totalElements, totalPages, isFirst, isLast, content]
       properties:
-        page:
+        pageNumber:
           type: integer
           description: Índice de página comenzando en cero.
-        size:
+        pageSize:
           type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        isFirst:
+          type: boolean
+        isLast:
+          type: boolean
         content:
           type: array
           items:
             $ref: '#/components/schemas/ClienteResponse'
+    PageTimbrado:
+      type: object
+      required: [pageNumber, pageSize, totalElements, totalPages, isFirst, isLast, content]
+      properties:
+        pageNumber:
+          type: integer
+          description: Índice de página comenzando en cero.
+        pageSize:
+          type: integer
         totalElements:
           type: integer
           format: int64
         totalPages:
           type: integer
-    PageTimbrado:
-      type: object
-      required: [page, size, totalElements, totalPages, content]
-      properties:
-        page:
-          type: integer
-          description: Índice de página comenzando en cero.
-        size:
-          type: integer
+        isFirst:
+          type: boolean
+        isLast:
+          type: boolean
         content:
           type: array
           items:
             $ref: '#/components/schemas/Timbrado'
+    PageFacturaVenta:
+      type: object
+      required: [pageNumber, pageSize, totalElements, totalPages, isFirst, isLast, content]
+      properties:
+        pageNumber:
+          type: integer
+          description: Índice de página comenzando en cero.
+        pageSize:
+          type: integer
         totalElements:
           type: integer
           format: int64
         totalPages:
           type: integer
-    PageFacturaVenta:
-      type: object
-      required: [page, size, totalElements, totalPages, content]
-      properties:
-        page:
-          type: integer
-          description: Índice de página comenzando en cero.
-        size:
-          type: integer
+        isFirst:
+          type: boolean
+        isLast:
+          type: boolean
         content:
           type: array
           items:
             $ref: '#/components/schemas/FacturaVentaResponse'
-        totalElements:
-          type: integer
-          format: int64
-        totalPages:
-          type: integer
-    PageFacturaVentaDetalle:
-      type: object
-      required: [page, size, totalElements, totalPages, content]
-      properties:
-        page:
-          type: integer
-          description: Índice de página comenzando en cero.
-        size:
-          type: integer
-        content:
-          type: array
-          items:
-            $ref: '#/components/schemas/FacturaVentaDetalleResponse'
-        totalElements:
-          type: integer
-          format: int64
-        totalPages:
-          type: integer

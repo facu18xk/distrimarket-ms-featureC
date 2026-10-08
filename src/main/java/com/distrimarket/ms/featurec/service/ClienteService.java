@@ -55,11 +55,26 @@ public class ClienteService extends AbstractBaseService<
     @Override
     protected void copiarCambios(Cliente target, Cliente source) {
         if (source.getPersona() != null) {
-            target.setPersona(resolverPersona(source.getPersona()));
+            if (source.getPersona().getId() == null && target.getPersona() != null) {
+                copiarDatosPersona(target.getPersona(), source.getPersona());
+                personaRepository.save(target.getPersona());
+            } else {
+                target.setPersona(resolverPersona(source.getPersona()));
+            }
         }
         if (source.getEstado() != null) {
             target.setEstado(source.getEstado());
         }
+    }
+
+    private void copiarDatosPersona(Persona target, Persona source) {
+        target.setTipoPersona(source.getTipoPersona());
+        target.setNombreCompleto(source.getNombreCompleto());
+        target.setCi(source.getCi());
+        target.setRuc(source.getRuc());
+        target.setTelefono(source.getTelefono());
+        target.setCorreo(source.getCorreo());
+        target.setDireccion(source.getDireccion());
     }
 
     @Override

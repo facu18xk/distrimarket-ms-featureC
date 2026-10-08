@@ -11,7 +11,8 @@ import org.mapstruct.Mapping;
                 EntityReferenceMapper.class,
                 ClienteMapper.class,
                 TimbradoMapper.class,
-                FacturaVentaDetalleMapper.class
+                FacturaVentaDetalleMapper.class,
+                MedioPagoMapper.class
         })
 public interface FacturaVentaMapper
         extends BaseMapper<FacturaVentaRequestDTO, FacturaVentaResponseDTO, FacturaVenta> {
@@ -38,14 +39,4 @@ public interface FacturaVentaMapper
     @Mapping(source = "idMedioPago", target = "medioPago", qualifiedByName = "medioPagoReference")
     @Mapping(source = "idTimbrado", target = "timbrado", qualifiedByName = "timbradoReference")
     FacturaVenta toEntity(FacturaVentaRequestDTO request);
-
-    @Mapping(source = "id", target = "idMedioPago")
-    MedioPagoDTO toMedioPagoDto(MedioPago entity);
-
-    @Mapping(source = "id", target = "idDeposito")
-    DepositoDTO toDepositoDto(Deposito entity);
-
-    @Mapping(source = "id", target = "idEmpleado")
-    EmpleadoResponseDTO toEmpleadoDto(Empleado entity);
-
 }

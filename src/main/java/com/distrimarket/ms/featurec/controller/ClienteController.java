@@ -6,7 +6,9 @@ import com.distrimarket.commons.dto.ClienteRequestDTO;
 import com.distrimarket.commons.dto.ClienteResponseDTO;
 import com.distrimarket.ms.featurec.service.ClienteService;
 import com.distrimarket.ms.featurec.mapper.ClienteMapper;
+import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/clientes")
 @Tag(name = "Clientes")
@@ -36,39 +40,40 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
     }
 
     @GetMapping
-    @Operation(operationId = "listClientes", summary = "Listar clientes")
+    @Operation(operationId = "listClientes")
     public ClientePageResponseDTO listar(
-            @RequestParam(required = false, name = "q") String query,
-            Pageable pageable) {
+            @RequestBody(required = false) Map<String, Object> filter,
+            @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
+            @Parameter(hidden = true) Pageable pageable) {
+        String query = SearchFilterSupport.query(filter, legacyQuery);
         var result = clienteService.search(query, allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion", "estado",
                 "persona.nombreCompleto", "persona.tipoPersona", "persona.ci", "persona.ruc"));
         ClientePageResponseDTO response = new ClientePageResponseDTO();
-        response.setPage(result.getNumber());
-        response.setSize(result.getSize());
+        response.setPageNumber(result.getNumber());
+        response.setPageSize(result.getSize());
         response.setTotalElements(result.getTotalElements());
         response.setTotalPages(result.getTotalPages());
+        response.setIsFirst(result.isFirst());
+        response.setIsLast(result.isLast());
         response.setContent(result.map(mapper()::toDto).getContent());
         return response;
     }
 
     @Override
     @GetMapping("/{id}")
-    @Operation(summary = "Obtener cliente por ID")
     public ClienteResponseDTO get(@PathVariable Long id) {
         return super.get(id);
     }
 
     @Override
     @PostMapping
-    @Operation(summary = "Crear cliente")
     public ResponseEntity<ClienteResponseDTO> create(@Valid @RequestBody ClienteRequestDTO request) {
         return super.create(request);
     }
 
     @Override
     @PutMapping("/{id}")
-    @Operation(summary = "Actualizar cliente")
     public ClienteResponseDTO update(
             @PathVariable Long id,
             @Valid @RequestBody ClienteRequestDTO request) {
@@ -78,7 +83,6 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
     @Override
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Eliminar cliente")
     public void delete(@PathVariable Long id) {
         super.delete(id);
     }

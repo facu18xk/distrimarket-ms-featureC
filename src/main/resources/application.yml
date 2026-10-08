@@ -1,7 +1,7 @@
 server:
   port: ${SERVER_PORT:8082}
   servlet:
-    context-path: ${SERVER_CONTEXT_PATH:/api/v1}
+    context-path: ${SERVER_CONTEXT_PATH:/ventas}
 
 spring:
   application:
@@ -50,11 +50,13 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+    url: /openapi/openapi.yml
     display-request-duration: true
     disable-swagger-default-url: true
+    display-operation-id: false
 
 openapi:
-  server-url: ${OPENAPI_SERVER_URL:http://localhost:${SERVER_PORT:8082}${SERVER_CONTEXT_PATH:/api/v1}}
+  server-url: ${OPENAPI_SERVER_URL:http://localhost:${SERVER_PORT:8082}${SERVER_CONTEXT_PATH:/ventas}}
 
 management:
   endpoints:
