@@ -44,13 +44,17 @@ public abstract class AbstractBaseService<
         if (specification != null) {
             combined = combined.and(specification);
         }
-        return repository.findAll(combined, pageable);
+        Page<E> page = repository.findAll(combined, pageable);
+        log.debug("Búsqueda de {}: página={} tamaño={} total={}",
+                resourceName, page.getNumber(), page.getSize(), page.getTotalElements());
+        return page;
     }
 
     @Override
     @Transactional(readOnly = true)
     public E get(Long id) {
         validarId(id);
+        log.debug("Buscando {} {}", resourceName, id);
         E entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(resourceName, id));
         return validarActivo(entity, id);

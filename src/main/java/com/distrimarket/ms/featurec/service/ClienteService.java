@@ -2,6 +2,7 @@ package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.entity.Cliente;
 import com.distrimarket.commons.entity.Persona;
+import com.distrimarket.commons.enums.TipoPersona;
 import com.distrimarket.commons.dto.ClienteRequestDTO;
 import com.distrimarket.commons.dto.ClienteResponseDTO;
 import com.distrimarket.ms.featurec.repository.ClienteRepository;
@@ -37,8 +38,10 @@ public class ClienteService extends AbstractBaseService<
             return null;
         }
         if (persona.getId() == null) {
+            log.debug("Registrando persona nueva para el cliente: {}", persona.getNombreCompleto());
             return personaRepository.save(persona);
         }
+        log.debug("Asociando el cliente a la persona existente {}", persona.getId());
         return personaRepository.findById(persona.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Persona", persona.getId()));
     }
@@ -47,24 +50,79 @@ public class ClienteService extends AbstractBaseService<
     @Transactional
     public Cliente create(Cliente entity) {
         if (entity != null) {
+            if (entity.getPersona() != null && entity.getPersona().getId() == null) {
+                validarPersona(entity.getPersona());
+            }
             entity.setPersona(resolverPersona(entity.getPersona()));
+            // Un cliente siempre nace activo; la baja lógica solo ocurre con DELETE.
+            entity.setEstado(true);
         }
         return super.create(entity);
+    }
+
+    @Transactional
+    public Cliente actualizarParcialmente(Long id, Persona cambiosPersona) {
+        Cliente cliente = get(id);
+        if (cambiosPersona != null && cliente.getPersona() != null) {
+            Persona persona = cliente.getPersona();
+            if (cambiosPersona.getTipoPersona() != null) {
+                persona.setTipoPersona(cambiosPersona.getTipoPersona());
+            }
+            if (cambiosPersona.getNombreCompleto() != null) {
+                persona.setNombreCompleto(cambiosPersona.getNombreCompleto());
+            }
+            if (cambiosPersona.getCi() != null) {
+                persona.setCi(cambiosPersona.getCi());
+            }
+            if (cambiosPersona.getRuc() != null) {
+                persona.setRuc(cambiosPersona.getRuc());
+            }
+            if (cambiosPersona.getTelefono() != null) {
+                persona.setTelefono(cambiosPersona.getTelefono());
+            }
+            if (cambiosPersona.getCorreo() != null) {
+                persona.setCorreo(cambiosPersona.getCorreo());
+            }
+            if (cambiosPersona.getDireccion() != null) {
+                persona.setDireccion(cambiosPersona.getDireccion());
+            }
+            validarPersona(persona);
+            personaRepository.save(persona);
+        }
+        log.info("Actualizando parcialmente Cliente {}", id);
+        return repository.save(cliente);
+    }
+
+    // Misma regla que Persona valida al persistir, anticipada para responder 400 y no 500.
+    private void validarPersona(Persona persona) {
+        if (persona.getTipoPersona() == null) {
+            throw new IllegalArgumentException("El tipo de persona es obligatorio.");
+        }
+        if (persona.getNombreCompleto() == null || persona.getNombreCompleto().isBlank()) {
+            throw new IllegalArgumentException("El nombre completo de la persona es obligatorio.");
+        }
+        if (persona.getTipoPersona() == TipoPersona.JURIDICA
+                && (persona.getRuc() == null || persona.getRuc().isBlank())) {
+            throw new IllegalArgumentException("Una persona jurídica debe tener RUC.");
+        }
+        if (persona.getTipoPersona() == TipoPersona.FISICA
+                && (persona.getCi() == null || persona.getCi().isBlank())) {
+            throw new IllegalArgumentException("Una persona física debe tener CI.");
+        }
     }
 
     @Override
     protected void copiarCambios(Cliente target, Cliente source) {
         if (source.getPersona() != null) {
             if (source.getPersona().getId() == null && target.getPersona() != null) {
+                validarPersona(source.getPersona());
                 copiarDatosPersona(target.getPersona(), source.getPersona());
                 personaRepository.save(target.getPersona());
             } else {
                 target.setPersona(resolverPersona(source.getPersona()));
             }
         }
-        if (source.getEstado() != null) {
-            target.setEstado(source.getEstado());
-        }
+        // El estado no se modifica por PUT: la baja lógica solo ocurre con DELETE.
     }
 
     private void copiarDatosPersona(Persona target, Persona source) {

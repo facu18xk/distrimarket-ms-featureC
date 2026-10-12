@@ -6,7 +6,6 @@ import com.distrimarket.commons.dto.TimbradoCreateDTO;
 import com.distrimarket.commons.dto.TimbradoDTO;
 import com.distrimarket.ms.featurec.service.TimbradoService;
 import com.distrimarket.ms.featurec.mapper.TimbradoMapper;
-import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,8 +24,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
 @RestController
 @RequestMapping("/timbrados")
 @Tag(name = "Timbrados")
@@ -39,12 +36,10 @@ public class TimbradoController extends BaseController<TimbradoCreateDTO, Timbra
     }
 
     @GetMapping
-    @Operation(operationId = "listTimbrados")
+    @Operation(operationId = "listarTimbrados")
     public TimbradoPageResponseDTO listar(
-            @RequestBody(required = false) Map<String, Object> filter,
-            @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
+            @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
-        String query = SearchFilterSupport.query(filter, legacyQuery);
         var result = timbradoService.search(query, allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion", "numeroTimbrado",
                 "fechaInicio", "fechaVencimiento", "puntoExpedicion", "sucursal", "activo"));

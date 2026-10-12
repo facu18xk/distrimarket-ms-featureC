@@ -31,7 +31,16 @@ public class TimbradoService extends AbstractBaseService<
         target.setFechaVencimiento(source.getFechaVencimiento());
         target.setPuntoExpedicion(source.getPuntoExpedicion());
         target.setSucursal(source.getSucursal());
-        target.setActivo(source.getActivo());
+        // El campo activo no se modifica por PUT: la baja lógica solo ocurre con DELETE.
+    }
+
+    @Override
+    @Transactional
+    public Timbrado create(Timbrado entity) {
+        if (entity != null) {
+            entity.setActivo(true);
+        }
+        return super.create(entity);
     }
 
     @Override
@@ -56,6 +65,8 @@ public class TimbradoService extends AbstractBaseService<
         if (entity.getFechaInicio() == null || entity.getFechaVencimiento() == null) {
             throw new IllegalArgumentException("El período de vigencia del timbrado es obligatorio.");
         }
+        log.debug("Validando vigencia del timbrado {}: {} a {}",
+                entity.getNumeroTimbrado(), entity.getFechaInicio(), entity.getFechaVencimiento());
         if (entity.getFechaVencimiento().isBefore(entity.getFechaInicio())) {
             throw new IllegalArgumentException("La fecha de vencimiento no puede ser anterior a la fecha de inicio.");
         }

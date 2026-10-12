@@ -2,30 +2,16 @@ package com.distrimarket.ms.featurec.config;
 
 import com.distrimarket.ms.featurec.logging.RequestLoggingInterceptor;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfiguration implements WebMvcConfigurer {
-    private final CorsProperties corsProperties;
     private final RequestLoggingInterceptor requestLoggingInterceptor;
 
-    public WebConfiguration(
-            CorsProperties corsProperties,
-            RequestLoggingInterceptor requestLoggingInterceptor) {
-        this.corsProperties = corsProperties;
+    public WebConfiguration(RequestLoggingInterceptor requestLoggingInterceptor) {
         this.requestLoggingInterceptor = requestLoggingInterceptor;
-    }
-
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**")
-                .allowedOrigins(corsProperties.getAllowedOrigins().toArray(String[]::new))
-                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .maxAge(corsProperties.getMaxAgeSeconds());
     }
 
     @Override
@@ -35,7 +21,8 @@ public class WebConfiguration implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/openapi/**")
-                .addResourceLocations("classpath:/openapi/");
+        // Contrato centralizado que viene dentro del jar distrimarket-common
+        registry.addResourceHandler("/openapi.yaml")
+                .addResourceLocations("classpath:/static/openapi.yaml", "classpath:/openapi.yaml");
     }
 }

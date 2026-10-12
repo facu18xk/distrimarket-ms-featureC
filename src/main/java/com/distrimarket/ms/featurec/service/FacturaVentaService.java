@@ -79,6 +79,7 @@ public class FacturaVentaService
 
     private void validarEditable(FacturaVenta factura) {
         if ("ANULADA".equalsIgnoreCase(factura.getEstado())) {
+            log.warn("Intento de modificar la factura anulada {}", factura.getId());
             throw new ConflictException("No se puede modificar una factura anulada.");
         }
     }
@@ -100,9 +101,12 @@ public class FacturaVentaService
             entity.setActivo(true);
         }
         resolverReferencias(entity);
+        validarNumeroUnico(entity, null);
         prepararDetalles(entity);
         ajustarStock(stockChanges(entity, 1));
         entity.recalcularTotales();
+        log.debug("Totales de la factura {}: iva={} general={}",
+                entity.getNumeroFactura(), entity.getTotalIva(), entity.getTotalGeneral());
         log.info("Emitiendo factura de venta {}", entity.getNumeroFactura());
         FacturaVenta guardada = repository.saveAndFlush(entity);
         return repository.findDetailedById(guardada.getId()).orElse(guardada);
@@ -114,6 +118,7 @@ public class FacturaVentaService
         FacturaVenta invoice = get(id);
         copiarCambios(invoice, changes);
         validar(invoice);
+        log.info("Actualizando Factura de venta {}", id);
         repository.saveAndFlush(invoice);
         return repository.findDetailedById(id).orElse(invoice);
     }
@@ -124,6 +129,10 @@ public class FacturaVentaService
             throw new IllegalArgumentException("El estado de la factura es obligatorio.");
         }
         FacturaVenta factura = get(id);
+        if (estado.name().equalsIgnoreCase(factura.getEstado())) {
+            log.warn("Intento de cambiar la factura {} al estado que ya tiene: {}", id, estado);
+            throw new ConflictException("La factura ya se encuentra en estado " + estado.name() + ".");
+        }
         if (EstadoFacturaVenta.EMITIDA.name().equals(factura.getEstado())
                 && estado == EstadoFacturaVenta.ANULADA) {
             ajustarStock(stockChanges(factura, -1));
@@ -140,7 +149,46 @@ public class FacturaVentaService
     public Page<FacturaVenta> search(
             String query,
             Pageable pageable) {
-        Specification<FacturaVenta> specification = (root, criteriaQuery, builder) -> builder.conjunction();
+        return search(query, null, null, null, null, null, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FacturaVenta> search(
+            String query,
+            Long idCliente,
+            Long idEmpleado,
+            Long idDeposito,
+            EstadoFacturaVenta estado,
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            Pageable pageable) {
+        if (fechaDesde != null && fechaHasta != null && fechaHasta.isBefore(fechaDesde)) {
+            throw new IllegalArgumentException("fechaHasta no puede ser anterior a fechaDesde.");
+        }
+        Specification<FacturaVenta> specification = (root, criteriaQuery, builder) -> {
+            var filters = new ArrayList<jakarta.persistence.criteria.Predicate>();
+            if (idCliente != null) {
+                filters.add(builder.equal(root.get("cliente").get("id"), idCliente));
+            }
+            if (idEmpleado != null) {
+                filters.add(builder.equal(root.get("empleado").get("id"), idEmpleado));
+            }
+            if (idDeposito != null) {
+                filters.add(builder.equal(root.get("deposito").get("id"), idDeposito));
+            }
+            if (estado != null) {
+                filters.add(builder.equal(root.get("estado"), estado.name()));
+            }
+            if (fechaDesde != null) {
+                filters.add(builder.greaterThanOrEqualTo(root.get("fechaEmision"), fechaDesde));
+            }
+            if (fechaHasta != null) {
+                filters.add(builder.lessThanOrEqualTo(root.get("fechaEmision"), fechaHasta));
+            }
+            return filters.isEmpty()
+                    ? builder.conjunction()
+                    : builder.and(filters.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
         if (query != null && !query.isBlank()) {
             String pattern = "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
             specification = specification.and((root, criteriaQuery, builder) -> {
@@ -210,9 +258,13 @@ public class FacturaVentaService
 
     @Override
     protected void copiarCambios(FacturaVenta target, FacturaVenta source) {
+        if (source != null && source.getFechaEmision() == null) {
+            source.setFechaEmision(target.getFechaEmision());
+        }
         validar(source);
         validarEditable(target);
         resolverReferencias(source);
+        validarNumeroUnico(source, target.getId());
         prepararDetalles(source);
         Map<StockKey, Integer> stockChanges = stockChanges(source, 1);
         restarStockActual(stockChanges, target);
@@ -233,9 +285,8 @@ public class FacturaVentaService
                 newDetails.add(requested);
                 continue;
             }
+            // Las líneas ya facturadas conservan el precio e IVA con los que se emitieron.
             current.setCantidad(requested.getCantidad());
-            current.setPrecioUnitario(requested.getPrecioUnitario());
-            current.setPorcentajeIva(requested.getPorcentajeIva());
             current.calcularSubtotal();
             retainedDetails.add(current);
         }
@@ -306,6 +357,21 @@ public class FacturaVentaService
         }
     }
 
+    private void validarNumeroUnico(FacturaVenta factura, Long idActual) {
+        Long timbradoId = factura.getTimbrado().getId();
+        boolean duplicada = idActual == null
+                ? repository.existsByNumeroFacturaAndTimbrado_Id(factura.getNumeroFactura(), timbradoId)
+                : repository.existsByNumeroFacturaAndTimbrado_IdAndIdNot(
+                        factura.getNumeroFactura(), timbradoId, idActual);
+        if (duplicada) {
+            log.warn("Intento de registrar un número de factura duplicado: {} (timbrado {})",
+                    factura.getNumeroFactura(), timbradoId);
+            throw new ConflictException(
+                    "Ya existe una factura con el número %s para el timbrado indicado."
+                            .formatted(factura.getNumeroFactura()));
+        }
+    }
+
     private void prepararDetalles(FacturaVenta entity) {
         for (FacturaVentaDetalle detalle : entity.getDetalles()) {
             prepararDetalle(detalle);
@@ -320,7 +386,10 @@ public class FacturaVentaService
         Long productoId = detalle.getProducto().getId();
         Producto producto = productoRepository.findById(productoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Producto", productoId));
+        log.debug("Producto {} recuperado: precio={} iva={}",
+                productoId, producto.getPrecioVenta(), producto.getPorcentajeIva());
         if (!Boolean.TRUE.equals(producto.getEstado())) {
+            log.warn("Intento de vender el producto inactivo {}", productoId);
             throw new BusinessRuleException("El producto " + producto.getId() + " está inactivo.");
         }
         detalle.setProducto(producto);
@@ -444,7 +513,11 @@ public class FacturaVentaService
             int available = stock.getCantidad() == null ? 0 : stock.getCantidad();
             int requestedChange = entry.getValue();
             long resultingQuantity = (long) available - requestedChange;
+            log.debug("Stock del producto {} en el depósito {}: disponible={} cambio={} resultante={}",
+                    key.productoId(), key.depositoId(), available, requestedChange, resultingQuantity);
             if (requestedChange > 0 && available < requestedChange) {
+                log.warn("Stock insuficiente para el producto {} en el depósito {}: disponible={} solicitado={}",
+                        key.productoId(), key.depositoId(), available, requestedChange);
                 throw new BusinessRuleException(
                         "Stock insuficiente para el producto %d en el depósito %d: disponible %d, solicitado %d."
                                 .formatted(key.productoId(), key.depositoId(), available, requestedChange));

@@ -1,18 +1,19 @@
 package com.distrimarket.ms.featurec.controller;
 
 import com.distrimarket.commons.entity.FacturaVenta;
+import com.distrimarket.commons.dto.EstadoFacturaVenta;
 import com.distrimarket.commons.dto.FacturaVentaEstadoRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaPageResponseDTO;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
 import com.distrimarket.ms.featurec.service.FacturaVentaService;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
-import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/facturas-venta")
@@ -47,13 +48,18 @@ public class FacturaVentaController
     }
 
     @GetMapping
-    @Operation(operationId = "listFacturasVenta")
+    @Operation(operationId = "listarFacturasVenta")
     public FacturaVentaPageResponseDTO listar(
-            @RequestBody(required = false) Map<String, Object> filter,
-            @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
+            @RequestParam(required = false, name = "q") String query,
+            @RequestParam(required = false, name = "idCliente") Long idCliente,
+            @RequestParam(required = false, name = "idEmpleado") Long idEmpleado,
+            @RequestParam(required = false, name = "idDeposito") Long idDeposito,
+            @RequestParam(required = false, name = "estado") EstadoFacturaVenta estado,
+            @RequestParam(required = false, name = "fechaDesde") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false, name = "fechaHasta") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @Parameter(hidden = true) Pageable pageable) {
-        String query = SearchFilterSupport.query(filter, legacyQuery);
-        var result = facturaVentaService.search(query, pageable);
+        var result = facturaVentaService.search(
+                query, idCliente, idEmpleado, idDeposito, estado, fechaDesde, fechaHasta, pageable);
         FacturaVentaPageResponseDTO response = new FacturaVentaPageResponseDTO();
         response.setPageNumber(result.getNumber());
         response.setPageSize(result.getSize());

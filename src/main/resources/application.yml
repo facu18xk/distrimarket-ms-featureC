@@ -6,6 +6,9 @@ server:
 spring:
   application:
     name: distrimarket-ventas
+  devtools:
+    restart:
+      enabled: false
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pos_db}?sslmode=${DB_SSL_MODE:require}&prepareThreshold=${DB_PREPARE_THRESHOLD:0}
@@ -22,7 +25,7 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      ddl-auto: ${JPA_DDL_AUTO:none}
     properties:
       hibernate:
         format_sql: ${JPA_FORMAT_SQL:false}
@@ -31,7 +34,7 @@ spring:
     show-sql: ${JPA_SHOW_SQL:false}
 
   liquibase:
-    enabled: ${LIQUIBASE_ENABLED:false}
+    enabled: ${LIQUIBASE_ENABLED:true}
     change-log: classpath:db/changelog/db.changelog-master.yaml
     default-schema: public
 
@@ -48,15 +51,14 @@ spring:
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: true
   swagger-ui:
     path: /swagger-ui.html
-    url: /openapi/openapi.yml
-    display-request-duration: true
-    disable-swagger-default-url: true
-    display-operation-id: false
-
-openapi:
-  server-url: ${OPENAPI_SERVER_URL:http://localhost:${SERVER_PORT:8082}${SERVER_CONTEXT_PATH:/ventas}}
+    url: /openapi.yaml
+    operations-sorter: method
+    tags-sorter: alpha
+  default-produces-media-type: application/json
+  override-with-generic-response: false
 
 management:
   endpoints:
@@ -74,6 +76,7 @@ logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
     com.distrimarket: ${LOG_LEVEL_APP:INFO}
+    com.distrimarket.ms.featurec.service: ${LOG_LEVEL_SERVICE:DEBUG}
     com.distrimarket.ms.featurec.repository: ${LOG_LEVEL_REPOSITORY:DEBUG}
     com.distrimarket.ms.featurec.logging.RepositoryLoggingAspect: ${LOG_LEVEL_REPOSITORY:DEBUG}
     org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
@@ -84,10 +87,6 @@ pagination:
   max-page-size: ${PAGINATION_MAX_PAGE_SIZE:${PAGINATION_SEARCH_LIMIT:100}}
   one-indexed-parameters: ${PAGINATION_ONE_INDEXED:false}
 
-cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
-  max-age-seconds: ${CORS_MAX_AGE_SECONDS:3600}
-
 eureka:
   client:
     service-url:
@@ -96,6 +95,6 @@ eureka:
     fetch-registry: true
   instance:
     prefer-ip-address: true
-    instance-id: ${spring. application.name} :${server.port}
+    instance-id: ${spring.application.name}:${server.port}
     status-page-url-path: /ventas/actuator/info
     health-check-url-path: /ventas/actuator/health

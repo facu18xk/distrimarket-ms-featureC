@@ -62,4 +62,8 @@ public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
             """)
     Optional<FacturaVenta> findDetailedById(@Param("id") Long id);
 
+    boolean existsByNumeroFacturaAndTimbrado_Id(String numeroFactura, Long timbradoId);
+
+    boolean existsByNumeroFacturaAndTimbrado_IdAndIdNot(String numeroFactura, Long timbradoId, Long id);
+
 }

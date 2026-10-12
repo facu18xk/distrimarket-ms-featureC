@@ -1,6 +1,7 @@
 package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.dto.MedioPagoDTO;
+import com.distrimarket.commons.dto.MedioPagoRequestDTO;
 import com.distrimarket.commons.entity.MedioPago;
 import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
@@ -18,7 +19,7 @@ import java.util.Locale;
 
 @Service
 public class MedioPagoService extends AbstractBaseService<
-        MedioPago, MedioPagoDTO, MedioPagoDTO, MedioPagoRepository, MedioPagoMapper> {
+        MedioPago, MedioPagoRequestDTO, MedioPagoDTO, MedioPagoRepository, MedioPagoMapper> {
 
     public MedioPagoService(MedioPagoRepository repository, MedioPagoMapper mapper) {
         super(repository, mapper, "Medio de pago");
@@ -58,7 +59,9 @@ public class MedioPagoService extends AbstractBaseService<
         boolean duplicate = entity.getId() == null
                 ? repository.existsByNombreIgnoreCase(nombre)
                 : repository.existsByNombreIgnoreCaseAndIdNot(nombre, entity.getId());
+        log.debug("Nombre de medio de pago '{}' (id={}) duplicado={}", nombre, entity.getId(), duplicate);
         if (duplicate) {
+            log.warn("Intento de registrar un medio de pago duplicado: {}", nombre);
             throw new ConflictException("Ya existe un medio de pago con ese nombre.");
         }
         if (entity.getActivo() == null) {
