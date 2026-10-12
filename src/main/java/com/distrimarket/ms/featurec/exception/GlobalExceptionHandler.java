@@ -2,6 +2,7 @@ package com.distrimarket.ms.featurec.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import feign.FeignException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -54,7 +55,6 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), request, null);
     }
 
-    // Cubre también MethodArgumentNotValidException (@Valid en el cuerpo), que es una BindException.
     @ExceptionHandler(BindException.class)
     public ResponseEntity<ApiErrorResponse> handleValidationErrors(BindException ex, HttpServletRequest request) {
         Map<String, String> errors = new LinkedHashMap<>();
@@ -139,6 +139,15 @@ public class GlobalExceptionHandler {
         log.error("Base de datos no disponible atendiendo {} {}", request.getMethod(), request.getRequestURI(), ex);
         return buildResponse(HttpStatus.SERVICE_UNAVAILABLE,
                 "El servicio no está disponible en este momento. Intente más tarde.", request, null);
+    }
+
+    // Inventario caído, inalcanzable o con un fallo propio: ventas no puede completar la operación.
+    @ExceptionHandler(FeignException.class)
+    public ResponseEntity<ApiErrorResponse> handleRemoteServiceFailure(FeignException ex, HttpServletRequest request) {
+        log.error("Fallo al comunicarse con otro microservicio atendiendo {} {}",
+                request.getMethod(), request.getRequestURI(), ex);
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE,
+                "El servicio de inventario no está disponible en este momento. Intente más tarde.", request, null);
     }
 
     @ExceptionHandler(Exception.class)

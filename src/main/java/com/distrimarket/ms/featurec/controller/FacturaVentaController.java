@@ -37,14 +37,19 @@ public class FacturaVentaController
         extends BaseController<FacturaVentaRequestDTO, FacturaVentaResponseDTO, FacturaVenta> {
 
     private final FacturaVentaService facturaVentaService;
-    private final FacturaVentaMapper facturaVentaMapper;
+
 
     public FacturaVentaController(
             FacturaVentaService service,
             FacturaVentaMapper mapper) {
         super(service, mapper);
         this.facturaVentaService = service;
-        this.facturaVentaMapper = mapper;
+    }
+
+    // La respuesta incluye datos de inventario, así que la arma el servicio y no solo el mapper.
+    @Override
+    protected FacturaVentaResponseDTO toResponse(FacturaVenta entity) {
+        return facturaVentaService.toResponse(entity);
     }
 
     @GetMapping
@@ -67,7 +72,7 @@ public class FacturaVentaController
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(result.map(facturaVentaMapper::toDto).getContent());
+        response.setContent(facturaVentaService.toResponses(result.getContent()));
         return response;
     }
 
@@ -98,7 +103,7 @@ public class FacturaVentaController
     public FacturaVentaResponseDTO actualizarEstado(
             @PathVariable Long facturaId,
             @Valid @RequestBody FacturaVentaEstadoRequestDTO request) {
-        return facturaVentaMapper.toDto(facturaVentaService.actualizarEstado(facturaId, request.getEstado()));
+        return toResponse(facturaVentaService.actualizarEstado(facturaId, request.getEstado()));
     }
 
     @Override

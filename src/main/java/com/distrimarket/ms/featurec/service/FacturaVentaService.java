@@ -9,9 +9,10 @@ import com.distrimarket.commons.entity.Deposito;
 import com.distrimarket.commons.entity.Empleado;
 import com.distrimarket.commons.entity.MedioPago;
 import com.distrimarket.commons.entity.Producto;
-import com.distrimarket.commons.entity.StockDeposito;
 import com.distrimarket.commons.entity.Timbrado;
+import com.distrimarket.commons.dto.DepositoResponseDTO;
 import com.distrimarket.commons.dto.EstadoFacturaVenta;
+import com.distrimarket.commons.dto.ProductoResponseDTO;
 import com.distrimarket.ms.featurec.config.PageableSortSupport;
 import com.distrimarket.ms.featurec.config.SearchQuerySupport;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
@@ -19,11 +20,8 @@ import com.distrimarket.ms.featurec.exception.BusinessRuleException;
 import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
-import com.distrimarket.ms.featurec.repository.DepositoRepository;
 import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.repository.MedioPagoRepository;
-import com.distrimarket.ms.featurec.repository.ProductoRepository;
-import com.distrimarket.ms.featurec.repository.StockDepositoRepository;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -31,19 +29,22 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
-import java.util.Comparator;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -55,26 +56,32 @@ public class FacturaVentaService
 
     private final FacturaVentaRepository repository;
     private final MedioPagoRepository medioPagoRepository;
-    private final ProductoRepository productoRepository;
-    private final DepositoRepository depositoRepository;
-    private final StockDepositoRepository stockDepositoRepository;
+    private final InventarioService inventarioService;
+    private final FacturaVentaResponseAssembler responseAssembler;
     private final EntityManager entityManager;
 
     public FacturaVentaService(
             FacturaVentaRepository repository,
             FacturaVentaMapper mapper,
             MedioPagoRepository medioPagoRepository,
-            ProductoRepository productoRepository,
-            DepositoRepository depositoRepository,
-            StockDepositoRepository stockDepositoRepository,
+            InventarioService inventarioService,
+            FacturaVentaResponseAssembler responseAssembler,
             EntityManager entityManager) {
         super(repository, mapper, "Factura de venta");
+        this.responseAssembler = responseAssembler;
         this.repository = repository;
         this.medioPagoRepository = medioPagoRepository;
-        this.productoRepository = productoRepository;
-        this.depositoRepository = depositoRepository;
-        this.stockDepositoRepository = stockDepositoRepository;
+        this.inventarioService = inventarioService;
         this.entityManager = entityManager;
+    }
+
+    @Override
+    public FacturaVentaResponseDTO toResponse(FacturaVenta factura) {
+        return responseAssembler.toResponse(factura);
+    }
+
+    public List<FacturaVentaResponseDTO> toResponses(List<FacturaVenta> facturas) {
+        return responseAssembler.toResponses(facturas);
     }
 
     private void validarEditable(FacturaVenta factura) {
@@ -87,6 +94,7 @@ public class FacturaVentaService
     @Override
     @Transactional(readOnly = true)
     public FacturaVenta get(Long id) {
+        validarId(id);
         FacturaVenta factura = repository.findDetailedById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Factura de venta", id));
         return validarActivo(factura, id);
@@ -103,7 +111,7 @@ public class FacturaVentaService
         resolverReferencias(entity);
         validarNumeroUnico(entity, null);
         prepararDetalles(entity);
-        ajustarStock(stockChanges(entity, 1));
+        ajustarStock(stockChanges(entity, 1), "Venta factura " + entity.getNumeroFactura());
         entity.recalcularTotales();
         log.debug("Totales de la factura {}: iva={} general={}",
                 entity.getNumeroFactura(), entity.getTotalIva(), entity.getTotalGeneral());
@@ -135,10 +143,10 @@ public class FacturaVentaService
         }
         if (EstadoFacturaVenta.EMITIDA.name().equals(factura.getEstado())
                 && estado == EstadoFacturaVenta.ANULADA) {
-            ajustarStock(stockChanges(factura, -1));
+            reponerStock(factura, "Anulación de factura " + factura.getNumeroFactura());
         } else if (EstadoFacturaVenta.ANULADA.name().equals(factura.getEstado())
                 && estado == EstadoFacturaVenta.EMITIDA) {
-            ajustarStock(stockChanges(factura, 1));
+            ajustarStock(stockChanges(factura, 1), "Reemisión de factura " + factura.getNumeroFactura());
         }
         factura.setEstado(estado.name());
         log.info("Actualizando estado de factura {} a {}", factura.getNumeroFactura(), estado);
@@ -268,7 +276,7 @@ public class FacturaVentaService
         prepararDetalles(source);
         Map<StockKey, Integer> stockChanges = stockChanges(source, 1);
         restarStockActual(stockChanges, target);
-        ajustarStock(stockChanges);
+        ajustarStock(stockChanges, "Modificación de factura " + source.getNumeroFactura());
 
         Map<Long, Deque<FacturaVentaDetalle>> existingByProduct = new HashMap<>();
         for (FacturaVentaDetalle detalle : target.getDetalles()) {
@@ -310,7 +318,7 @@ public class FacturaVentaService
     public void delete(Long id) {
         FacturaVenta factura = get(id);
         if ("EMITIDA".equalsIgnoreCase(factura.getEstado())) {
-            ajustarStock(stockChanges(factura, -1));
+            reponerStock(factura, "Baja de factura " + factura.getNumeroFactura());
             factura.setEstado(EstadoFacturaVenta.ANULADA.name());
         }
         factura.setActivo(false);
@@ -384,15 +392,15 @@ public class FacturaVentaService
             throw new IllegalArgumentException("Cada detalle debe indicar un producto.");
         }
         Long productoId = detalle.getProducto().getId();
-        Producto producto = productoRepository.findById(productoId)
-                .orElseThrow(() -> new ResourceNotFoundException("Producto", productoId));
+        // El producto es de inventario: de allí salen precio, IVA y estado; aquí solo se guarda la referencia.
+        ProductoResponseDTO producto = inventarioService.obtenerProducto(productoId);
         log.debug("Producto {} recuperado: precio={} iva={}",
                 productoId, producto.getPrecioVenta(), producto.getPorcentajeIva());
         if (!Boolean.TRUE.equals(producto.getEstado())) {
             log.warn("Intento de vender el producto inactivo {}", productoId);
-            throw new BusinessRuleException("El producto " + producto.getId() + " está inactivo.");
+            throw new BusinessRuleException("El producto " + productoId + " está inactivo.");
         }
-        detalle.setProducto(producto);
+        detalle.setProducto(entityManager.getReference(Producto.class, productoId));
         detalle.setPrecioUnitario(producto.getPrecioVenta());
         detalle.setPorcentajeIva(producto.getPorcentajeIva());
         validarDetalle(detalle);
@@ -400,17 +408,24 @@ public class FacturaVentaService
 
     private void resolverReferencias(FacturaVenta entity) {
         entity.setCliente(resolver(Cliente.class, entity.getCliente(), "Cliente"));
-        entity.setEmpleado(resolver(Empleado.class, entity.getEmpleado(), "Empleado"));
+        // Empleado y depósito son de inventario: se validan allí y aquí solo se guarda la referencia.
+        if (entity.getEmpleado() == null || entity.getEmpleado().getId() == null) {
+            throw new IllegalArgumentException("Empleado es obligatorio.");
+        }
+        Long empleadoId = entity.getEmpleado().getId();
+        if (!Boolean.TRUE.equals(inventarioService.obtenerEmpleado(empleadoId).getEstado())) {
+            throw new BusinessRuleException("El empleado está inactivo.");
+        }
+        entity.setEmpleado(entityManager.getReference(Empleado.class, empleadoId));
         if (entity.getDeposito() == null || entity.getDeposito().getId() == null) {
             throw new IllegalArgumentException("Depósito es obligatorio.");
         }
         Long depositoId = entity.getDeposito().getId();
-        Deposito deposito = depositoRepository.findById(depositoId)
-                .orElseThrow(() -> new ResourceNotFoundException("Depósito", depositoId));
+        DepositoResponseDTO deposito = inventarioService.obtenerDeposito(depositoId);
         if (!Boolean.TRUE.equals(deposito.getEstado())) {
             throw new BusinessRuleException("El depósito está inactivo.");
         }
-        entity.setDeposito(deposito);
+        entity.setDeposito(entityManager.getReference(Deposito.class, depositoId));
         MedioPago medioPago = entity.getMedioPago();
         if (medioPago == null || medioPago.getId() == null) {
             throw new IllegalArgumentException("Medio de pago es obligatorio.");
@@ -491,50 +506,78 @@ public class FacturaVentaService
         }
     }
 
-    private void ajustarStock(Map<StockKey, Integer> changes) {
-        var orderedChanges = changes.entrySet().stream()
-                .filter(entry -> entry.getValue() != 0)
-                .sorted(Map.Entry.comparingByKey(Comparator
-                        .comparing(StockKey::depositoId)
-                        .thenComparing(StockKey::productoId)))
-                .toList();
-
-        Map<StockKey, StockDeposito> stockRows = new HashMap<>();
-        Map<StockKey, Integer> resultingQuantities = new HashMap<>();
-        for (var entry : orderedChanges) {
-            StockKey key = entry.getKey();
-            StockDeposito stock = stockDepositoRepository
-                    .findByDeposito_IdAndProducto_Id(key.depositoId(), key.productoId())
-                    .orElseThrow(() -> new BusinessRuleException(
-                            "No hay stock registrado para el producto %d en el depósito %d."
-                                    .formatted(key.productoId(), key.depositoId())));
-            stockRows.put(key, stock);
-
-            int available = stock.getCantidad() == null ? 0 : stock.getCantidad();
-            int requestedChange = entry.getValue();
-            long resultingQuantity = (long) available - requestedChange;
-            log.debug("Stock del producto {} en el depósito {}: disponible={} cambio={} resultante={}",
-                    key.productoId(), key.depositoId(), available, requestedChange, resultingQuantity);
-            if (requestedChange > 0 && available < requestedChange) {
-                log.warn("Stock insuficiente para el producto {} en el depósito {}: disponible={} solicitado={}",
-                        key.productoId(), key.depositoId(), available, requestedChange);
-                throw new BusinessRuleException(
-                        "Stock insuficiente para el producto %d en el depósito %d: disponible %d, solicitado %d."
-                                .formatted(key.productoId(), key.depositoId(), available, requestedChange));
-            }
-            if (resultingQuantity < 0 || resultingQuantity > Integer.MAX_VALUE) {
-                throw new BusinessRuleException(
-                        "El ajuste de stock del producto %d en el depósito %d excede el rango permitido."
-                                .formatted(key.productoId(), key.depositoId()));
-            }
-            resultingQuantities.put(key, (int) resultingQuantity);
+    /**
+     * Devuelve a inventario lo que la factura había consumido. Anular o dar de baja una venta siempre
+     * debe poder hacerse: si inventario dio de baja el depósito o algún producto, eso no se repone
+     * (ya no hay stock que llevar) y queda registrado.
+     */
+    private void reponerStock(FacturaVenta factura, String motivo) {
+        Map<StockKey, Integer> changes = stockChanges(factura, -1);
+        if (changes.isEmpty()) {
+            return;
         }
-
-        for (var entry : orderedChanges) {
-            StockDeposito stock = stockRows.get(entry.getKey());
-            stock.setCantidad(resultingQuantities.get(entry.getKey()));
-            stockDepositoRepository.save(stock);
+        Long depositoId = factura.getDeposito().getId();
+        if (inventarioService.buscarDeposito(depositoId).isEmpty()) {
+            log.warn("El depósito {} ya no está en inventario; no se repone stock ({})", depositoId, motivo);
+            return;
         }
+        changes.keySet().removeIf(key -> {
+            boolean dadoDeBaja = inventarioService.buscarProducto(key.productoId()).isEmpty();
+            if (dadoDeBaja) {
+                log.warn("El producto {} ya no está en inventario; su stock no se repone ({})",
+                        key.productoId(), motivo);
+            }
+            return dadoDeBaja;
+        });
+        ajustarStock(changes, motivo);
+    }
+
+    /**
+     * Pide a inventario que aplique los cambios de stock. En {@code changes} una cantidad positiva
+     * es lo que la factura consume; inventario espera el signo contrario (negativo descuenta).
+     */
+    private void ajustarStock(Map<StockKey, Integer> changes, String motivo) {
+        Map<Long, Map<Long, Integer>> movimientosPorDeposito = new TreeMap<>();
+        changes.forEach((key, consumo) -> {
+            if (consumo != 0) {
+                movimientosPorDeposito.computeIfAbsent(key.depositoId(), ignored -> new TreeMap<>())
+                        .put(key.productoId(), Math.negateExact(consumo));
+            }
+        });
+
+        movimientosPorDeposito.forEach((depositoId, movimientos) -> {
+            log.debug("Movimiento de stock para el depósito {}: {} ({})", depositoId, movimientos, motivo);
+            inventarioService.moverStock(depositoId, movimientos, motivo);
+            revertirStockSiLaTransaccionFalla(depositoId, movimientos, motivo);
+        });
+    }
+
+    /**
+     * El stock vive en otro microservicio y no participa de la transacción de ventas: si la factura
+     * no llega a guardarse, se devuelve a inventario lo que ya se había movido.
+     */
+    private void revertirStockSiLaTransaccionFalla(Long depositoId, Map<Long, Integer> aplicados, String motivo) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    return;
+                }
+                Map<Long, Integer> inverso = new TreeMap<>();
+                aplicados.forEach((productoId, cantidad) -> inverso.put(productoId, -cantidad));
+                try {
+                    inventarioService.moverStock(depositoId, inverso, "Reversión: " + motivo);
+                    log.warn("La operación no se completó; se revirtió el stock del depósito {}: {} ({})",
+                            depositoId, inverso, motivo);
+                } catch (RuntimeException ex) {
+                    log.error("No se pudo revertir el stock del depósito {}: {} ({}). Requiere corrección manual.",
+                            depositoId, inverso, motivo, ex);
+                }
+            }
+        });
     }
 
     private void acumular(Map<StockKey, Integer> changes, StockKey key, int quantity) {

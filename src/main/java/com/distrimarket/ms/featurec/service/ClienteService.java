@@ -7,6 +7,7 @@ import com.distrimarket.commons.dto.ClienteRequestDTO;
 import com.distrimarket.commons.dto.ClienteResponseDTO;
 import com.distrimarket.ms.featurec.repository.ClienteRepository;
 import com.distrimarket.ms.featurec.repository.PersonaRepository;
+import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.config.SearchQuerySupport;
 import jakarta.persistence.criteria.Predicate;
@@ -52,6 +53,7 @@ public class ClienteService extends AbstractBaseService<
         if (entity != null) {
             if (entity.getPersona() != null && entity.getPersona().getId() == null) {
                 validarPersona(entity.getPersona());
+                validarDocumentosUnicos(entity.getPersona().getCi(), entity.getPersona().getRuc(), null);
             }
             entity.setPersona(resolverPersona(entity.getPersona()));
             // Un cliente siempre nace activo; la baja lógica solo ocurre con DELETE.
@@ -65,6 +67,8 @@ public class ClienteService extends AbstractBaseService<
         Cliente cliente = get(id);
         if (cambiosPersona != null && cliente.getPersona() != null) {
             Persona persona = cliente.getPersona();
+            // Antes de tocar la entidad: una consulta posterior la enviaría a la base con el dato duplicado.
+            validarDocumentosUnicos(cambiosPersona.getCi(), cambiosPersona.getRuc(), persona.getId());
             if (cambiosPersona.getTipoPersona() != null) {
                 persona.setTipoPersona(cambiosPersona.getTipoPersona());
             }
@@ -111,11 +115,29 @@ public class ClienteService extends AbstractBaseService<
         }
     }
 
+    // CI y RUC son únicos en la base; se avisa con un mensaje claro en vez del conflicto genérico.
+    private void validarDocumentosUnicos(String ci, String ruc, Long idPersonaActual) {
+        if (ci != null && !ci.isBlank() && (idPersonaActual == null
+                ? personaRepository.existsByCi(ci)
+                : personaRepository.existsByCiAndIdNot(ci, idPersonaActual))) {
+            log.warn("Intento de registrar una persona con CI duplicado: {}", ci);
+            throw new ConflictException("Ya existe una persona con el CI " + ci + ".");
+        }
+        if (ruc != null && !ruc.isBlank() && (idPersonaActual == null
+                ? personaRepository.existsByRuc(ruc)
+                : personaRepository.existsByRucAndIdNot(ruc, idPersonaActual))) {
+            log.warn("Intento de registrar una persona con RUC duplicado: {}", ruc);
+            throw new ConflictException("Ya existe una persona con el RUC " + ruc + ".");
+        }
+    }
+
     @Override
     protected void copiarCambios(Cliente target, Cliente source) {
         if (source.getPersona() != null) {
             if (source.getPersona().getId() == null && target.getPersona() != null) {
                 validarPersona(source.getPersona());
+                validarDocumentosUnicos(
+                        source.getPersona().getCi(), source.getPersona().getRuc(), target.getPersona().getId());
                 copiarDatosPersona(target.getPersona(), source.getPersona());
                 personaRepository.save(target.getPersona());
             } else {

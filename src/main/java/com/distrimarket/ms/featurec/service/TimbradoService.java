@@ -5,6 +5,7 @@ import com.distrimarket.commons.dto.TimbradoCreateDTO;
 import com.distrimarket.commons.dto.TimbradoDTO;
 import com.distrimarket.ms.featurec.repository.TimbradoRepository;
 import com.distrimarket.ms.featurec.mapper.TimbradoMapper;
+import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.config.SearchQuerySupport;
 import jakarta.persistence.criteria.Predicate;
@@ -69,6 +70,16 @@ public class TimbradoService extends AbstractBaseService<
                 entity.getNumeroTimbrado(), entity.getFechaInicio(), entity.getFechaVencimiento());
         if (entity.getFechaVencimiento().isBefore(entity.getFechaInicio())) {
             throw new IllegalArgumentException("La fecha de vencimiento no puede ser anterior a la fecha de inicio.");
+        }
+        String numeroTimbrado = entity.getNumeroTimbrado().trim();
+        entity.setNumeroTimbrado(numeroTimbrado);
+        // El número es único en la base aunque el timbrado anterior esté dado de baja.
+        boolean duplicado = entity.getId() == null
+                ? repository.existsByNumeroTimbrado(numeroTimbrado)
+                : repository.existsByNumeroTimbradoAndIdNot(numeroTimbrado, entity.getId());
+        if (duplicado) {
+            log.warn("Intento de registrar un número de timbrado duplicado: {}", numeroTimbrado);
+            throw new ConflictException("Ya existe un timbrado con ese número.");
         }
         if (entity.getActivo() == null) {
             entity.setActivo(true);

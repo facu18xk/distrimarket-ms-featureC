@@ -4,11 +4,8 @@ import com.distrimarket.commons.entity.FacturaVenta;
 import com.distrimarket.commons.entity.FacturaVentaDetalle;
 import com.distrimarket.commons.entity.Producto;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
-import com.distrimarket.ms.featurec.repository.DepositoRepository;
 import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.repository.MedioPagoRepository;
-import com.distrimarket.ms.featurec.repository.ProductoRepository;
-import com.distrimarket.ms.featurec.repository.StockDepositoRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -49,9 +46,8 @@ class FacturaVentaServiceSearchTest {
     @Mock private FacturaVentaRepository repository;
     @Mock private FacturaVentaMapper mapper;
     @Mock private MedioPagoRepository medioPagoRepository;
-    @Mock private ProductoRepository productoRepository;
-    @Mock private DepositoRepository depositoRepository;
-    @Mock private StockDepositoRepository stockDepositoRepository;
+    @Mock private InventarioService inventarioService;
+    @Mock private FacturaVentaResponseAssembler responseAssembler;
     @Mock private EntityManager entityManager;
 
     private FacturaVentaService service;
@@ -60,8 +56,7 @@ class FacturaVentaServiceSearchTest {
     void setUp() {
         service = new FacturaVentaService(
                 repository, mapper,
-                medioPagoRepository, productoRepository, depositoRepository,
-                stockDepositoRepository, entityManager);
+                medioPagoRepository, inventarioService, responseAssembler, entityManager);
     }
 
     @Test

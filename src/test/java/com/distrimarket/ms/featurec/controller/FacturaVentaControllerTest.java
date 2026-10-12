@@ -61,14 +61,15 @@ class FacturaVentaControllerTest {
         FacturaVentaResponseDTO response = new FacturaVentaResponseDTO();
         when(service.search(nullable(String.class), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(invoice), PageRequest.of(0, 10), 1));
-        when(mapper.toDto(invoice)).thenReturn(response);
+        when(service.toResponses(List.of(invoice))).thenReturn(List.of(response));
 
         mvc.perform(get("/facturas-venta").param("page", "0").param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content.length()").value(1));
 
-        verify(mapper).toDto(invoice);
+        // La respuesta la arma el servicio, que completa los datos de inventario.
+        verify(service).toResponses(List.of(invoice));
     }
 
     @Test

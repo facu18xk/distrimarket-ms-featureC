@@ -48,6 +48,19 @@ spring:
     contentnegotiation:
       default-content-type: application/json
 
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: ${INVENTARIO_CONNECT_TIMEOUT_MS:3000}
+            read-timeout: ${INVENTARIO_READ_TIMEOUT_MS:15000}
+
+# Microservicio de inventario: se ubica por su nombre en Eureka
+inventario:
+  service-name: ${INVENTARIO_SERVICE_NAME:distrimarket-inventario}
+  context-path: ${INVENTARIO_CONTEXT_PATH:/inventario}
+
 springdoc:
   api-docs:
     path: /v3/api-docs

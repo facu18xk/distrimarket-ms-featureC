@@ -23,16 +23,6 @@ public class EntityReferenceMapper {
         return reference(Producto.class, id);
     }
 
-    @Named("categoriaReference")
-    public Categoria categoria(Long id) {
-        return reference(Categoria.class, id);
-    }
-
-    @Named("marcaReference")
-    public Marca marca(Long id) {
-        return reference(Marca.class, id);
-    }
-
     @Named("timbradoReference")
     public Timbrado timbrado(Long id) {
         return reference(Timbrado.class, id);

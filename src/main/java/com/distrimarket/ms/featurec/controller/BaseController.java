@@ -30,24 +30,29 @@ public abstract class BaseController<REQUEST_DTO, RESPONSE_DTO, E extends BaseEn
 
     @GetMapping("/{id}")
     public RESPONSE_DTO get(@PathVariable Long id) {
-        return mapper.toDto(service.getForRead(id));
+        return toResponse(service.getForRead(id));
     }
 
     @PostMapping
     public ResponseEntity<RESPONSE_DTO> create(@RequestBody REQUEST_DTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(mapper.toDto(service.create(mapper.toEntity(request))));
+                .body(toResponse(service.create(mapper.toEntity(request))));
     }
 
     @PutMapping("/{id}")
     public RESPONSE_DTO update(@PathVariable Long id, @RequestBody REQUEST_DTO request) {
-        return mapper.toDto(service.update(id, mapper.toEntity(request)));
+        return toResponse(service.update(id, mapper.toEntity(request)));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         service.delete(id);
+    }
+
+    // Punto de extensión: un recurso cuya respuesta necesita más que el mapper lo redefine.
+    protected RESPONSE_DTO toResponse(E entity) {
+        return mapper.toDto(entity);
     }
 
     protected Pageable allowSorts(Pageable pageable, String... properties) {
