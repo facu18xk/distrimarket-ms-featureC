@@ -39,5 +39,6 @@ public interface FacturaVentaMapper
     @Mapping(source = "idDeposito", target = "deposito", qualifiedByName = "depositoReference")
     @Mapping(source = "idMedioPago", target = "medioPago", qualifiedByName = "medioPagoReference")
     @Mapping(source = "idTimbrado", target = "timbrado", qualifiedByName = "timbradoReference")
+    @Mapping(target = "activo", ignore = true)
     FacturaVenta toEntity(FacturaVentaRequestDTO request);
 }

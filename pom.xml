@@ -144,6 +144,9 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <compilerArgs>
+                        <arg>-implicit:class</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <!-- 1. Lombok Processor -->
                         <path>
