@@ -25,10 +25,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/clientes")
 @Tag(name = "Clientes")
+@PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR')")
 public class ClienteController extends BaseController<ClienteRequestDTO, ClienteResponseDTO, Cliente> {
 
     private final ClienteService clienteService;
@@ -55,7 +57,7 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(result.map(mapper()::toDto).getContent());
+        response.setContent(contenido(result.getContent()));
         return response;
     }
 
@@ -84,13 +86,14 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
     public ClienteResponseDTO actualizarParcialmente(
             @PathVariable Long id,
             @RequestBody ClientePatchRequestDTO request) {
-        return clienteMapper.toDto(clienteService.actualizarParcialmente(
-                id, clienteMapper.toPersona(request.getPersona())));
+        return clienteService.parchear(id, request);
     }
 
+    // Dar de baja un cliente queda para el administrador (regla a nivel de método).
     @Override
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
     public void delete(@PathVariable Long id) {
         super.delete(id);
     }

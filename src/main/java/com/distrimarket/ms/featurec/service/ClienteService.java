@@ -3,7 +3,13 @@ package com.distrimarket.ms.featurec.service;
 import com.distrimarket.commons.entity.Cliente;
 import com.distrimarket.commons.entity.Persona;
 import com.distrimarket.commons.enums.TipoPersona;
+import com.distrimarket.commons.dto.ClientePatchRequestDTO;
 import com.distrimarket.commons.dto.ClienteRequestDTO;
+import com.distrimarket.ms.featurec.config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import com.distrimarket.commons.dto.ClienteResponseDTO;
 import com.distrimarket.ms.featurec.repository.ClienteRepository;
 import com.distrimarket.ms.featurec.repository.PersonaRepository;
@@ -32,6 +38,56 @@ public class ClienteService extends AbstractBaseService<
                           PersonaRepository personaRepository) {
         super(repository, mapper, "Cliente");
         this.personaRepository = personaRepository;
+    }
+
+    // --- Caché (dominio "cliente", TTL configurable) ---
+
+    @Override
+    protected String cacheName() {
+        return CacheConfig.CLIENTE;
+    }
+
+    @Override
+    protected Object cacheKey(ClienteResponseDTO response) {
+        return response.getIdCliente();
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheConfig.CLIENTE, key = "#id")
+    public ClienteResponseDTO obtener(Long id) {
+        return super.obtener(id);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.CLIENTE, key = "#result.idCliente")
+    public ClienteResponseDTO crear(ClienteRequestDTO request) {
+        return super.crear(request);
+    }
+
+    // Las facturas en caché muestran al cliente: esa sección también se invalida.
+    @Override
+    @Caching(
+            put = @CachePut(cacheNames = CacheConfig.CLIENTE, key = "#id"),
+            evict = @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true))
+    public ClienteResponseDTO actualizar(Long id, ClienteRequestDTO request) {
+        return super.actualizar(id, request);
+    }
+
+    @Caching(
+            put = @CachePut(cacheNames = CacheConfig.CLIENTE, key = "#id"),
+            evict = @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true))
+    @Transactional
+    public ClienteResponseDTO parchear(Long id, ClientePatchRequestDTO request) {
+        Persona cambios = request == null ? null : mapper.toPersona(request.getPersona());
+        return toResponse(actualizarParcialmente(id, cambios));
+    }
+
+    @Override
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CacheConfig.CLIENTE, key = "#id"),
+            @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true)})
+    public void eliminar(Long id) {
+        super.eliminar(id);
     }
 
     private Persona resolverPersona(Persona persona) {

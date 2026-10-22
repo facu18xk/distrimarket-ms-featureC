@@ -27,12 +27,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/facturas-venta")
 @Tag(name = "Facturas-Venta")
+@PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR')")
 public class FacturaVentaController
         extends BaseController<FacturaVentaRequestDTO, FacturaVentaResponseDTO, FacturaVenta> {
 
@@ -44,12 +46,6 @@ public class FacturaVentaController
             FacturaVentaMapper mapper) {
         super(service, mapper);
         this.facturaVentaService = service;
-    }
-
-    // La respuesta incluye datos de inventario, así que la arma el servicio y no solo el mapper.
-    @Override
-    protected FacturaVentaResponseDTO toResponse(FacturaVenta entity) {
-        return facturaVentaService.toResponse(entity);
     }
 
     @GetMapping
@@ -72,7 +68,7 @@ public class FacturaVentaController
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(facturaVentaService.toResponses(result.getContent()));
+        response.setContent(contenido(result.getContent()));
         return response;
     }
 
@@ -103,12 +99,14 @@ public class FacturaVentaController
     public FacturaVentaResponseDTO actualizarEstado(
             @PathVariable Long facturaId,
             @Valid @RequestBody FacturaVentaEstadoRequestDTO request) {
-        return toResponse(facturaVentaService.actualizarEstado(facturaId, request.getEstado()));
+        return facturaVentaService.cambiarEstado(facturaId, request.getEstado());
     }
 
+    // Un vendedor puede anular (PATCH), pero dar de baja una factura queda para el administrador.
     @Override
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
             description = "Conserva sus detalles y repone el stock cuando la factura estaba emitida.")
     public void delete(@PathVariable Long id) {

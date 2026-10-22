@@ -1,6 +1,11 @@
 package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.entity.Timbrado;
+import com.distrimarket.ms.featurec.config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import com.distrimarket.commons.dto.TimbradoCreateDTO;
 import com.distrimarket.commons.dto.TimbradoDTO;
 import com.distrimarket.ms.featurec.repository.TimbradoRepository;
@@ -23,6 +28,47 @@ public class TimbradoService extends AbstractBaseService<
 
     public TimbradoService(TimbradoRepository repository, TimbradoMapper mapper) {
         super(repository, mapper, "Timbrado");
+    }
+
+    // --- Caché (dominio "timbrado", persistente) ---
+
+    @Override
+    protected String cacheName() {
+        return CacheConfig.TIMBRADO;
+    }
+
+    @Override
+    protected Object cacheKey(TimbradoDTO response) {
+        return response.getIdTimbrado();
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheConfig.TIMBRADO, key = "#id")
+    public TimbradoDTO obtener(Long id) {
+        return super.obtener(id);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.TIMBRADO, key = "#result.idTimbrado")
+    public TimbradoDTO crear(TimbradoCreateDTO request) {
+        return super.crear(request);
+    }
+
+    // Las facturas en caché muestran el timbrado: esa sección también se invalida.
+    @Override
+    @Caching(
+            put = @CachePut(cacheNames = CacheConfig.TIMBRADO, key = "#id"),
+            evict = @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true))
+    public TimbradoDTO actualizar(Long id, TimbradoCreateDTO request) {
+        return super.actualizar(id, request);
+    }
+
+    @Override
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CacheConfig.TIMBRADO, key = "#id"),
+            @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true)})
+    public void eliminar(Long id) {
+        super.eliminar(id);
     }
 
     @Override

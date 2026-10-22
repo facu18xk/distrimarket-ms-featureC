@@ -23,10 +23,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/timbrados")
 @Tag(name = "Timbrados")
+@PreAuthorize("hasRole('ADMIN')")
 public class TimbradoController extends BaseController<TimbradoCreateDTO, TimbradoDTO, Timbrado> {
     private final TimbradoService timbradoService;
 
@@ -35,8 +37,10 @@ public class TimbradoController extends BaseController<TimbradoCreateDTO, Timbra
         this.timbradoService = service;
     }
 
+    // Consultar: también vendedores (eligen el timbrado al facturar). Modificar: solo ADMIN.
     @GetMapping
     @Operation(operationId = "listarTimbrados")
+    @PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR')")
     public TimbradoPageResponseDTO listar(
             @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
@@ -50,12 +54,13 @@ public class TimbradoController extends BaseController<TimbradoCreateDTO, Timbra
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(result.map(mapper()::toDto).getContent());
+        response.setContent(contenido(result.getContent()));
         return response;
     }
 
     @Override
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR')")
     public TimbradoDTO get(@PathVariable Long id) {
         return super.get(id);
     }

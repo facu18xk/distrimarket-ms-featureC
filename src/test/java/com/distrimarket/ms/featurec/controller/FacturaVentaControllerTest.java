@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
@@ -61,23 +62,20 @@ class FacturaVentaControllerTest {
         FacturaVentaResponseDTO response = new FacturaVentaResponseDTO();
         when(service.search(nullable(String.class), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(invoice), PageRequest.of(0, 10), 1));
-        when(service.toResponses(List.of(invoice))).thenReturn(List.of(response));
+        when(service.toResponsesCacheados(List.of(invoice))).thenReturn(List.of(response));
 
         mvc.perform(get("/facturas-venta").param("page", "0").param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content.length()").value(1));
 
-        // La respuesta la arma el servicio, que completa los datos de inventario.
-        verify(service).toResponses(List.of(invoice));
+        // La respuesta la arma el servicio (con datos de inventario) y guarda cada factura en caché.
+        verify(service).toResponsesCacheados(List.of(invoice));
     }
 
     @Test
     void createReturns201WithInvoiceAggregate() throws Exception {
-        FacturaVenta entity = new FacturaVenta();
-        when(mapper.toEntity(any(FacturaVentaRequestDTO.class))).thenReturn(entity);
-        when(service.create(entity)).thenReturn(entity);
-        when(mapper.toDto(entity)).thenReturn(new FacturaVentaResponseDTO());
+        when(service.crear(any(FacturaVentaRequestDTO.class))).thenReturn(new FacturaVentaResponseDTO());
 
         mvc.perform(post("/facturas-venta").contentType("application/json").content(invoiceJson()))
                 .andExpect(status().isCreated());
@@ -92,12 +90,9 @@ class FacturaVentaControllerTest {
 
     @Test
     void invoiceRoutesDelegateWithExpectedRestStatuses() throws Exception {
-        FacturaVenta invoice = new FacturaVenta();
-        when(service.getForRead(20L)).thenReturn(invoice);
-        when(mapper.toDto(invoice)).thenReturn(new FacturaVentaResponseDTO());
-        when(mapper.toEntity(any(FacturaVentaRequestDTO.class))).thenReturn(invoice);
-        when(service.update(20L, invoice)).thenReturn(invoice);
-        when(service.actualizarEstado(20L, EstadoFacturaVenta.ANULADA)).thenReturn(invoice);
+        when(service.obtener(20L)).thenReturn(new FacturaVentaResponseDTO());
+        when(service.actualizar(eq(20L), any(FacturaVentaRequestDTO.class))).thenReturn(new FacturaVentaResponseDTO());
+        when(service.cambiarEstado(20L, EstadoFacturaVenta.ANULADA)).thenReturn(new FacturaVentaResponseDTO());
 
         mvc.perform(get("/facturas-venta/20")).andExpect(status().isOk());
         mvc.perform(put("/facturas-venta/20").contentType("application/json").content(invoiceJson()))
@@ -107,7 +102,8 @@ class FacturaVentaControllerTest {
                 .andExpect(status().isOk());
         mvc.perform(delete("/facturas-venta/20")).andExpect(status().isNoContent());
 
-        verify(service).delete(20L);
+        verify(service).cambiarEstado(20L, EstadoFacturaVenta.ANULADA);
+        verify(service).eliminar(20L);
     }
 
     @Test

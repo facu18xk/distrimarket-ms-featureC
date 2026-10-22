@@ -13,7 +13,11 @@ import com.distrimarket.commons.entity.Timbrado;
 import com.distrimarket.commons.dto.DepositoResponseDTO;
 import com.distrimarket.commons.dto.EstadoFacturaVenta;
 import com.distrimarket.commons.dto.ProductoResponseDTO;
+import com.distrimarket.ms.featurec.config.CacheConfig;
 import com.distrimarket.ms.featurec.config.PageableSortSupport;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import com.distrimarket.ms.featurec.config.SearchQuerySupport;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
@@ -80,8 +84,52 @@ public class FacturaVentaService
         return responseAssembler.toResponse(factura);
     }
 
+    @Override
     public List<FacturaVentaResponseDTO> toResponses(List<FacturaVenta> facturas) {
         return responseAssembler.toResponses(facturas);
+    }
+
+    // --- Caché (dominio "factura-venta", TTL corto: incluye datos de inventario) ---
+
+    @Override
+    protected String cacheName() {
+        return CacheConfig.FACTURA_VENTA;
+    }
+
+    @Override
+    protected Object cacheKey(FacturaVentaResponseDTO response) {
+        return response.getIdFacturaVenta();
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    public FacturaVentaResponseDTO obtener(Long id) {
+        return super.obtener(id);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#result.idFacturaVenta")
+    public FacturaVentaResponseDTO crear(FacturaVentaRequestDTO request) {
+        return super.crear(request);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    public FacturaVentaResponseDTO actualizar(Long id, FacturaVentaRequestDTO request) {
+        return super.actualizar(id, request);
+    }
+
+    /** Anular o volver a emitir: la factura en caché se reemplaza por la nueva versión. */
+    @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    @Transactional
+    public FacturaVentaResponseDTO cambiarEstado(Long id, EstadoFacturaVenta estado) {
+        return toResponse(actualizarEstado(id, estado));
+    }
+
+    @Override
+    @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    public void eliminar(Long id) {
+        super.eliminar(id);
     }
 
     private void validarEditable(FacturaVenta factura) {

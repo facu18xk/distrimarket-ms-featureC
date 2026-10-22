@@ -3,6 +3,11 @@ package com.distrimarket.ms.featurec.service;
 import com.distrimarket.commons.dto.MedioPagoDTO;
 import com.distrimarket.commons.dto.MedioPagoRequestDTO;
 import com.distrimarket.commons.entity.MedioPago;
+import com.distrimarket.ms.featurec.config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.mapper.MedioPagoMapper;
@@ -23,6 +28,47 @@ public class MedioPagoService extends AbstractBaseService<
 
     public MedioPagoService(MedioPagoRepository repository, MedioPagoMapper mapper) {
         super(repository, mapper, "Medio de pago");
+    }
+
+    // --- Caché (dominio "medio-pago", persistente) ---
+
+    @Override
+    protected String cacheName() {
+        return CacheConfig.MEDIO_PAGO;
+    }
+
+    @Override
+    protected Object cacheKey(MedioPagoDTO response) {
+        return response.getIdMedioPago();
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheConfig.MEDIO_PAGO, key = "#id")
+    public MedioPagoDTO obtener(Long id) {
+        return super.obtener(id);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.MEDIO_PAGO, key = "#result.idMedioPago")
+    public MedioPagoDTO crear(MedioPagoRequestDTO request) {
+        return super.crear(request);
+    }
+
+    // Las facturas en caché muestran el medio de pago: esa sección también se invalida.
+    @Override
+    @Caching(
+            put = @CachePut(cacheNames = CacheConfig.MEDIO_PAGO, key = "#id"),
+            evict = @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true))
+    public MedioPagoDTO actualizar(Long id, MedioPagoRequestDTO request) {
+        return super.actualizar(id, request);
+    }
+
+    @Override
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CacheConfig.MEDIO_PAGO, key = "#id"),
+            @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true)})
+    public void eliminar(Long id) {
+        super.eliminar(id);
     }
 
     @Override

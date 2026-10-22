@@ -2,6 +2,10 @@ server:
   port: 8082
   servlet:
     context-path: /ventas
+  # Nunca se envían trazas al cliente; los errores salen con el formato de ApiErrorResponse.
+  error:
+    include-stacktrace: never
+    include-message: never
 
 spring:
   application:
@@ -48,6 +52,17 @@ spring:
     contentnegotiation:
       default-content-type: application/json
 
+  # Servidor Redis compartido por todos los microservicios del grupo.
+  data:
+    redis:
+      # 127.0.0.1 y no localhost: en Windows localhost resuelve primero a IPv6 (::1) y Redis en WSL/Docker escucha en IPv4.
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_TIMEOUT:2s}
+
   cloud:
     openfeign:
       client:
@@ -55,6 +70,63 @@ spring:
           default:
             connect-timeout: ${INVENTARIO_CONNECT_TIMEOUT_MS:3000}
             read-timeout: ${INVENTARIO_READ_TIMEOUT_MS:15000}
+
+# ---------------------------------------------------------------
+# Seguridad: valida los tokens emitidos por distrimarket-ms-auth.
+# ---------------------------------------------------------------
+security:
+  jwt:
+    # Misma clave y emisor que distrimarket-ms-auth y el gateway.
+    secret: ${JWT_SECRET:distrimarket-dev-secret-cambiar-en-produccion-2026}
+    issuer: ${JWT_ISSUER:distrimarket-auth}
+  # Rutas sin token (relativas a /ventas).
+  public-paths:
+    - /actuator/health/**
+    - /actuator/info
+    - /openapi.yaml
+    - /swagger-ui.html
+    - /swagger-ui/**
+    - /v3/api-docs/**
+    - /error
+  # Reglas por URL, en orden (la primera que coincide decide). Los controladores
+  # agregan reglas más finas con @PreAuthorize (por ejemplo, dar de baja solo ADMIN).
+  rules:
+    # Compras también lee los medios de pago al cargar una factura de compra.
+    - pattern: /medios-pago/**
+      methods: [GET]
+      roles: [ADMIN, VENDEDOR, COMPRADOR]
+    - pattern: /medios-pago/**
+      roles: [ADMIN]
+    - pattern: /timbrados/**
+      methods: [GET]
+      roles: [ADMIN, VENDEDOR]
+    - pattern: /timbrados/**
+      roles: [ADMIN]
+    - pattern: /**
+      roles: [ADMIN, VENDEDOR]
+
+# ---------------------------------------------------------------
+# Caché (Redis compartido). Cada dominio es una sección con su propio TTL
+# que se invalida por separado. TTL 0 = persistente (no vence; se actualiza
+# o se borra cuando el dato cambia en ventas).
+# ---------------------------------------------------------------
+distrimarket:
+  cache:
+    enabled: ${CACHE_ENABLED:true}
+    key-prefix: ${CACHE_KEY_PREFIX:distrimarket:ventas}
+    default-ttl: ${CACHE_DEFAULT_TTL:10m}
+    scan-batch-size: ${CACHE_SCAN_BATCH_SIZE:100}
+    domains:
+      # Catálogos propios que casi no cambian: persistentes.
+      medio-pago: ${CACHE_TTL_MEDIO_PAGO:0}
+      timbrado: ${CACHE_TTL_TIMBRADO:0}
+      cliente: ${CACHE_TTL_CLIENTE:30m}
+      # La factura incluye datos de inventario que pueden cambiar en otro microservicio.
+      factura-venta: ${CACHE_TTL_FACTURA_VENTA:10m}
+      # Datos de inventario solo para mostrar; ventas no se entera cuando cambian.
+      inventario-producto: ${CACHE_TTL_INVENTARIO_PRODUCTO:5m}
+      inventario-empleado: ${CACHE_TTL_INVENTARIO_EMPLEADO:30m}
+      inventario-deposito: ${CACHE_TTL_INVENTARIO_DEPOSITO:60m}
 
 # Microservicio de inventario: se ubica por su nombre en Eureka
 inventario:
@@ -93,6 +165,9 @@ logging:
     com.distrimarket.ms.featurec.repository: ${LOG_LEVEL_REPOSITORY:DEBUG}
     com.distrimarket.ms.featurec.logging.RepositoryLoggingAspect: ${LOG_LEVEL_REPOSITORY:DEBUG}
     org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+    # Operaciones de caché (GET con HIT/MISS, SET, DELETE) registradas por LoggingCache.
+    com.distrimarket.ms.featurec.config.LoggingCache: ${LOG_LEVEL_CACHE:INFO}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:INFO}
 
 pagination:
   default-page: ${PAGINATION_DEFAULT_PAGE:0}

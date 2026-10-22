@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -57,25 +58,19 @@ class MedioPagoControllerTest {
 
     @Test
     void createReturns201AndDeleteReturns204() throws Exception {
-        MedioPago entity = new MedioPago();
-        MedioPagoDTO response = new MedioPagoDTO();
-        when(mapper.toEntity(any(MedioPagoRequestDTO.class))).thenReturn(entity);
-        when(service.create(entity)).thenReturn(entity);
-        when(mapper.toDto(entity)).thenReturn(response);
+        when(service.crear(any(MedioPagoRequestDTO.class))).thenReturn(new MedioPagoDTO());
 
         mvc.perform(post("/medios-pago").contentType("application/json")
                         .content("{\"nombre\":\"Efectivo\"}"))
                 .andExpect(status().isCreated());
 
         mvc.perform(delete("/medios-pago/7")).andExpect(status().isNoContent());
-        verify(service).delete(7L);
+        verify(service).eliminar(7L);
     }
 
     @Test
     void blankNameIsReturnedAsStructured400() throws Exception {
-        MedioPago entity = new MedioPago();
-        when(mapper.toEntity(any(MedioPagoRequestDTO.class))).thenReturn(entity);
-        when(service.create(entity)).thenThrow(
+        when(service.crear(any(MedioPagoRequestDTO.class))).thenThrow(
                 new IllegalArgumentException("El nombre del medio de pago es obligatorio."));
 
         mvc.perform(post("/medios-pago").contentType("application/json")
@@ -86,17 +81,14 @@ class MedioPagoControllerTest {
 
     @Test
     void getAndUpdateDelegateAndReturn200() throws Exception {
-        MedioPago entity = new MedioPago();
-        when(service.getForRead(7L)).thenReturn(entity);
-        when(mapper.toDto(entity)).thenReturn(new MedioPagoDTO());
-        when(mapper.toEntity(any(MedioPagoRequestDTO.class))).thenReturn(entity);
-        when(service.update(7L, entity)).thenReturn(entity);
+        when(service.obtener(7L)).thenReturn(new MedioPagoDTO());
+        when(service.actualizar(eq(7L), any(MedioPagoRequestDTO.class))).thenReturn(new MedioPagoDTO());
 
         mvc.perform(get("/medios-pago/7")).andExpect(status().isOk());
         mvc.perform(put("/medios-pago/7").contentType("application/json")
                         .content("{\"nombre\":\"Tarjeta\"}"))
                 .andExpect(status().isOk());
 
-        verify(service).update(7L, entity);
+        verify(service).actualizar(eq(7L), any(MedioPagoRequestDTO.class));
     }
 }

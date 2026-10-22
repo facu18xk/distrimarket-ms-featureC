@@ -122,15 +122,15 @@ public class FacturaVentaResponseAssembler {
         private boolean disponible = true;
 
         Optional<ProductoResponseDTO> producto(Long id) {
-            return consultar(productos, id, inventarioService::buscarProducto);
+            return consultar(productos, id, inventarioService::mostrarProducto);
         }
 
         Optional<EmpleadoResponseDTO> empleado(Long id) {
-            return consultar(empleados, id, inventarioService::buscarEmpleado);
+            return consultar(empleados, id, inventarioService::mostrarEmpleado);
         }
 
         Optional<DepositoResponseDTO> deposito(Long id) {
-            return consultar(depositos, id, inventarioService::buscarDeposito);
+            return consultar(depositos, id, inventarioService::mostrarDeposito);
         }
 
         private <T> Optional<T> consultar(

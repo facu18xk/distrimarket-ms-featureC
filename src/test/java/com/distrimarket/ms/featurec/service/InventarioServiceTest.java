@@ -2,6 +2,8 @@ package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.dto.ProductoResponseDTO;
 import com.distrimarket.commons.dto.StockMovimientoRequestDTO;
+import com.distrimarket.ms.featurec.config.CacheConfig;
+import com.distrimarket.ms.featurec.config.DomainCache;
 import com.distrimarket.ms.featurec.client.InventarioClient;
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
@@ -29,6 +31,8 @@ class InventarioServiceTest {
 
     @Mock
     private InventarioClient inventarioClient;
+    @Mock
+    private DomainCache domainCache;
     @InjectMocks
     private InventarioService service;
 
@@ -38,6 +42,8 @@ class InventarioServiceTest {
         when(inventarioClient.obtenerProducto(7L)).thenReturn(producto);
 
         assertSame(producto, service.obtenerProducto(7L));
+        // El dato fresco de una validación reemplaza al que se muestra desde caché.
+        org.mockito.Mockito.verify(domainCache).put(CacheConfig.INVENTARIO_PRODUCTO, 7L, producto);
     }
 
     @Test

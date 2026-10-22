@@ -5,7 +5,10 @@ import com.distrimarket.commons.dto.EmpleadoResponseDTO;
 import com.distrimarket.commons.dto.ProductoResponseDTO;
 import com.distrimarket.commons.dto.StockMovimientoDetalleRequestDTO;
 import com.distrimarket.commons.dto.StockMovimientoRequestDTO;
+import com.distrimarket.ms.featurec.config.CacheConfig;
+import com.distrimarket.ms.featurec.config.DomainCache;
 import com.distrimarket.ms.featurec.client.InventarioClient;
+import org.springframework.cache.annotation.Cacheable;
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -19,28 +22,59 @@ import java.util.function.Function;
 
 /**
  * Servicio de apoyo (sin controlador): único punto de ventas que conversa con inventario.
+ *
+ * <p>Caché: las validaciones de una venta (producto activo, precio, stock) siempre consultan a
+ * inventario. Solo lo que ventas muestra (nombre del producto, vendedor, depósito de una factura)
+ * se lee de caché con {@code mostrar*}; cada consulta fresca de una validación lo actualiza.</p>
  */
 @Slf4j
 @Service
 public class InventarioService {
 
     private final InventarioClient inventarioClient;
+    private final DomainCache domainCache;
 
-    public InventarioService(InventarioClient inventarioClient) {
+    public InventarioService(InventarioClient inventarioClient, DomainCache domainCache) {
         this.inventarioClient = inventarioClient;
+        this.domainCache = domainCache;
     }
 
     /** Para validar una operación: si inventario no lo tiene, la operación no puede seguir (404). */
     public ProductoResponseDTO obtenerProducto(Long id) {
-        return obtener("Producto", id, inventarioClient::obtenerProducto);
+        return refrescar(CacheConfig.INVENTARIO_PRODUCTO, id,
+                obtener("Producto", id, inventarioClient::obtenerProducto));
     }
 
     public DepositoResponseDTO obtenerDeposito(Long id) {
-        return obtener("Depósito", id, inventarioClient::obtenerDeposito);
+        return refrescar(CacheConfig.INVENTARIO_DEPOSITO, id,
+                obtener("Depósito", id, inventarioClient::obtenerDeposito));
     }
 
     public EmpleadoResponseDTO obtenerEmpleado(Long id) {
-        return obtener("Empleado", id, inventarioClient::obtenerEmpleado);
+        return refrescar(CacheConfig.INVENTARIO_EMPLEADO, id,
+                obtener("Empleado", id, inventarioClient::obtenerEmpleado));
+    }
+
+    /** Para mostrar en una factura. Lo que inventario ya no ofrece (vacío) no se guarda. */
+    @Cacheable(cacheNames = CacheConfig.INVENTARIO_PRODUCTO, key = "#id", unless = "#result == null")
+    public Optional<ProductoResponseDTO> mostrarProducto(Long id) {
+        return buscarProducto(id);
+    }
+
+    @Cacheable(cacheNames = CacheConfig.INVENTARIO_DEPOSITO, key = "#id", unless = "#result == null")
+    public Optional<DepositoResponseDTO> mostrarDeposito(Long id) {
+        return buscarDeposito(id);
+    }
+
+    @Cacheable(cacheNames = CacheConfig.INVENTARIO_EMPLEADO, key = "#id", unless = "#result == null")
+    public Optional<EmpleadoResponseDTO> mostrarEmpleado(Long id) {
+        return buscarEmpleado(id);
+    }
+
+    // Uso programático del CacheManager: el dato recién traído de inventario reemplaza al guardado.
+    private <T> T refrescar(String dominio, Long id, T valor) {
+        domainCache.put(dominio, id, valor);
+        return valor;
     }
 
     /** Para mostrar datos: vacío si inventario ya no lo ofrece (por ejemplo, fue dado de baja). */

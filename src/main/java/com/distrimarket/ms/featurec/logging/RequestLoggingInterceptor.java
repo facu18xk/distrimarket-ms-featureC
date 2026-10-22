@@ -4,6 +4,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -18,8 +21,14 @@ public class RequestLoggingInterceptor implements HandlerInterceptor {
             HttpServletResponse response,
             Object handler) {
         request.setAttribute(START_TIME_ATTRIBUTE, System.nanoTime());
-        log.info("Solicitud entrante: {} {}", request.getMethod(), request.getRequestURI());
+        log.info("Solicitud entrante: {} {} usuario={}", request.getMethod(), request.getRequestURI(), usuario());
         return true;
+    }
+
+    // Usuario del token ya validado por Spring Security.
+    private static String usuario() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth == null || auth instanceof AnonymousAuthenticationToken ? "anónimo" : auth.getName();
     }
 
     @Override

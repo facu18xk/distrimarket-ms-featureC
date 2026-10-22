@@ -23,10 +23,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/medios-pago")
 @Tag(name = "Medios de pago")
+@PreAuthorize("hasRole('ADMIN')")
 public class MedioPagoController extends BaseController<MedioPagoRequestDTO, MedioPagoDTO, MedioPago> {
 
     private final MedioPagoService medioPagoService;
@@ -36,8 +38,10 @@ public class MedioPagoController extends BaseController<MedioPagoRequestDTO, Med
         this.medioPagoService = service;
     }
 
+    // Consultar: también vendedores y compradores (lo usan al facturar). Modificar: solo ADMIN.
     @GetMapping
     @Operation(operationId = "listarMediosPago")
+    @PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR', 'COMPRADOR')")
     public MedioPagoPageResponseDTO listar(
             @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
@@ -50,12 +54,13 @@ public class MedioPagoController extends BaseController<MedioPagoRequestDTO, Med
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(result.map(mapper()::toDto).getContent());
+        response.setContent(contenido(result.getContent()));
         return response;
     }
 
     @Override
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR', 'COMPRADOR')")
     public MedioPagoDTO get(@PathVariable Long id) {
         return super.get(id);
     }

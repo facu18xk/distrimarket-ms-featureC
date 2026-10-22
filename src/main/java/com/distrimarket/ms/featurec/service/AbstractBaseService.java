@@ -2,15 +2,19 @@ package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.entity.BaseEntity;
 import com.distrimarket.commons.model.SoftDeletable;
+import com.distrimarket.ms.featurec.config.DomainCache;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.mapper.BaseMapper;
 import com.distrimarket.ms.featurec.repository.BaseRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 public abstract class AbstractBaseService<
         E extends BaseEntity,
@@ -24,11 +28,71 @@ public abstract class AbstractBaseService<
     protected final R repository;
     protected final M mapper;
     private final String resourceName;
+    private DomainCache domainCache;
 
     protected AbstractBaseService(R repository, M mapper, String resourceName) {
         this.repository = repository;
         this.mapper = mapper;
         this.resourceName = resourceName;
+    }
+
+    @Autowired(required = false)
+    public void setDomainCache(DomainCache domainCache) {
+        this.domainCache = domainCache;
+    }
+
+    // ------------------------------------------------------------------
+    // Operaciones con DTO. Cada servicio las redefine solo para declarar su
+    // política de caché (@Cacheable, @CachePut, @CacheEvict) en su dominio.
+    // ------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public RESPONSE_DTO obtener(Long id) {
+        return toResponse(getForRead(id));
+    }
+
+    @Override
+    @Transactional
+    public RESPONSE_DTO crear(REQUEST_DTO request) {
+        return toResponse(create(toEntity(request)));
+    }
+
+    @Override
+    @Transactional
+    public RESPONSE_DTO actualizar(Long id, REQUEST_DTO request) {
+        return toResponse(update(id, toEntity(request)));
+    }
+
+    @Override
+    @Transactional
+    public void eliminar(Long id) {
+        delete(id);
+    }
+
+    @Override
+    public List<RESPONSE_DTO> toResponsesCacheados(List<E> entities) {
+        List<RESPONSE_DTO> responses = toResponses(entities);
+        String cacheName = cacheName();
+        if (domainCache != null && cacheName != null) {
+            // La página no se cachea (depende de filtros y orden); cada elemento sí, por su id.
+            domainCache.putAll(cacheName, responses, this::cacheKey);
+        }
+        return responses;
+    }
+
+    public List<RESPONSE_DTO> toResponses(List<E> entities) {
+        return entities.stream().map(this::toResponse).toList();
+    }
+
+    /** Dominio de caché del recurso; null si no se cachea. */
+    protected String cacheName() {
+        return null;
+    }
+
+    /** Clave de caché de un DTO (su id). */
+    protected Object cacheKey(RESPONSE_DTO response) {
+        return null;
     }
 
     @Transactional(readOnly = true)

@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.verify;
@@ -51,7 +52,7 @@ class ClienteControllerTest {
         ClienteResponseDTO dto = new ClienteResponseDTO();
         when(service.search(anyString(), any())).thenReturn(new PageImpl<>(
                 List.of(cliente), PageRequest.of(0, 10), 1));
-        when(mapper.toDto(cliente)).thenReturn(dto);
+        when(service.toResponsesCacheados(List.of(cliente))).thenReturn(List.of(dto));
 
         mvc.perform(get("/clientes").param("q", "Ana").param("page", "0").param("size", "10"))
                 .andExpect(status().isOk())
@@ -67,10 +68,7 @@ class ClienteControllerTest {
 
     @Test
     void createReturns201AndInvalidPayloadReturnsStandard400() throws Exception {
-        Cliente entity = new Cliente();
-        when(mapper.toEntity(any(ClienteRequestDTO.class))).thenReturn(entity);
-        when(service.create(entity)).thenReturn(entity);
-        when(mapper.toDto(entity)).thenReturn(new ClienteResponseDTO());
+        when(service.crear(any(ClienteRequestDTO.class))).thenReturn(new ClienteResponseDTO());
 
         mvc.perform(post("/clientes").contentType("application/json")
                         .content("""
@@ -86,23 +84,20 @@ class ClienteControllerTest {
 
     @Test
     void missingClientReturns404AndDeleteReturns204() throws Exception {
-        when(service.getForRead(55L)).thenThrow(new ResourceNotFoundException("Cliente", 55L));
+        when(service.obtener(55L)).thenThrow(new ResourceNotFoundException("Cliente", 55L));
 
         mvc.perform(get("/clientes/55"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
 
         mvc.perform(delete("/clientes/55")).andExpect(status().isNoContent());
-        verify(service).delete(55L);
+        verify(service).eliminar(55L);
     }
 
     @Test
     void getAndUpdateReturn200AndDelegateToService() throws Exception {
-        Cliente entity = new Cliente();
-        when(service.getForRead(8L)).thenReturn(entity);
-        when(mapper.toDto(entity)).thenReturn(new ClienteResponseDTO());
-        when(mapper.toEntity(any(ClienteRequestDTO.class))).thenReturn(entity);
-        when(service.update(8L, entity)).thenReturn(entity);
+        when(service.obtener(8L)).thenReturn(new ClienteResponseDTO());
+        when(service.actualizar(eq(8L), any(ClienteRequestDTO.class))).thenReturn(new ClienteResponseDTO());
 
         mvc.perform(get("/clientes/8")).andExpect(status().isOk());
         mvc.perform(put("/clientes/8").contentType("application/json")
@@ -111,6 +106,6 @@ class ClienteControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        verify(service).update(8L, entity);
+        verify(service).actualizar(eq(8L), any(ClienteRequestDTO.class));
     }
 }

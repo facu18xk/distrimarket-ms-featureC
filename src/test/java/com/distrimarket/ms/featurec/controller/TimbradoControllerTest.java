@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -55,10 +56,7 @@ class TimbradoControllerTest {
 
     @Test
     void createReturns201AndDeleteReturns204() throws Exception {
-        Timbrado entity = new Timbrado();
-        when(mapper.toEntity(any(TimbradoCreateDTO.class))).thenReturn(entity);
-        when(service.create(entity)).thenReturn(entity);
-        when(mapper.toDto(entity)).thenReturn(new TimbradoDTO());
+        when(service.crear(any(TimbradoCreateDTO.class))).thenReturn(new TimbradoDTO());
 
         mvc.perform(post("/timbrados").contentType("application/json")
                         .content("""
@@ -67,7 +65,7 @@ class TimbradoControllerTest {
                 .andExpect(status().isCreated());
 
         mvc.perform(delete("/timbrados/7")).andExpect(status().isNoContent());
-        verify(service).delete(7L);
+        verify(service).eliminar(7L);
     }
 
     @Test
@@ -80,11 +78,8 @@ class TimbradoControllerTest {
 
     @Test
     void getAndUpdateDelegateAndReturn200() throws Exception {
-        Timbrado entity = new Timbrado();
-        when(service.getForRead(7L)).thenReturn(entity);
-        when(mapper.toDto(entity)).thenReturn(new TimbradoDTO());
-        when(mapper.toEntity(any(TimbradoCreateDTO.class))).thenReturn(entity);
-        when(service.update(7L, entity)).thenReturn(entity);
+        when(service.obtener(7L)).thenReturn(new TimbradoDTO());
+        when(service.actualizar(eq(7L), any(TimbradoCreateDTO.class))).thenReturn(new TimbradoDTO());
 
         mvc.perform(get("/timbrados/7")).andExpect(status().isOk());
         mvc.perform(put("/timbrados/7").contentType("application/json")
@@ -93,6 +88,6 @@ class TimbradoControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        verify(service).update(7L, entity);
+        verify(service).actualizar(eq(7L), any(TimbradoCreateDTO.class));
     }
 }

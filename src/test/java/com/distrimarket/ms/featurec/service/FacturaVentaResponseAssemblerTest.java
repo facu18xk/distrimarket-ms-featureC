@@ -45,10 +45,10 @@ class FacturaVentaResponseAssemblerTest {
     @BeforeEach
     void setUp() {
         assembler = new FacturaVentaResponseAssembler(mapper, inventarioService);
-        lenient().when(inventarioService.buscarEmpleado(2L)).thenReturn(Optional.of(employee()));
-        lenient().when(inventarioService.buscarDeposito(3L)).thenReturn(Optional.of(warehouse()));
-        lenient().when(inventarioService.buscarProducto(7L)).thenReturn(Optional.of(product(7L, "Leche")));
-        lenient().when(inventarioService.buscarProducto(8L)).thenReturn(Optional.of(product(8L, "Pan")));
+        lenient().when(inventarioService.mostrarEmpleado(2L)).thenReturn(Optional.of(employee()));
+        lenient().when(inventarioService.mostrarDeposito(3L)).thenReturn(Optional.of(warehouse()));
+        lenient().when(inventarioService.mostrarProducto(7L)).thenReturn(Optional.of(product(7L, "Leche")));
+        lenient().when(inventarioService.mostrarProducto(8L)).thenReturn(Optional.of(product(8L, "Pan")));
     }
 
     @Test
@@ -73,17 +73,17 @@ class FacturaVentaResponseAssemblerTest {
         List<FacturaVentaResponseDTO> responses = assembler.toResponses(page);
 
         assertEquals(3, responses.size());
-        verify(inventarioService, times(1)).buscarProducto(7L);
-        verify(inventarioService, times(1)).buscarProducto(8L);
-        verify(inventarioService, times(1)).buscarEmpleado(2L);
-        verify(inventarioService, times(1)).buscarDeposito(3L);
+        verify(inventarioService, times(1)).mostrarProducto(7L);
+        verify(inventarioService, times(1)).mostrarProducto(8L);
+        verify(inventarioService, times(1)).mostrarEmpleado(2L);
+        verify(inventarioService, times(1)).mostrarDeposito(3L);
     }
 
     @Test
     void historicalInvoiceIsStillShownWhenInventoryNoLongerOffersItsData() {
-        when(inventarioService.buscarProducto(9L)).thenReturn(Optional.empty());
-        when(inventarioService.buscarEmpleado(2L)).thenReturn(Optional.empty());
-        when(inventarioService.buscarDeposito(3L)).thenReturn(Optional.empty());
+        when(inventarioService.mostrarProducto(9L)).thenReturn(Optional.empty());
+        when(inventarioService.mostrarEmpleado(2L)).thenReturn(Optional.empty());
+        when(inventarioService.mostrarDeposito(3L)).thenReturn(Optional.empty());
 
         FacturaVentaResponseDTO response = assembler.toResponse(invoice(9L, 7L));
 
@@ -96,7 +96,7 @@ class FacturaVentaResponseAssemblerTest {
 
     @Test
     void whenInventoryIsDownTheInvoiceIsShownWithIdsAndInventoryIsNotCalledAgain() {
-        when(inventarioService.buscarEmpleado(2L)).thenThrow(mock(FeignException.class));
+        when(inventarioService.mostrarEmpleado(2L)).thenThrow(mock(FeignException.class));
 
         List<FacturaVentaResponseDTO> responses = assembler.toResponses(List.of(invoice(7L, 8L), invoice(7L)));
 
@@ -104,9 +104,9 @@ class FacturaVentaResponseAssemblerTest {
         assertEquals(Map.of("id", 2L), responses.get(0).getEmpleado());
         assertEquals(Map.of("id", 3L), responses.get(0).getDeposito());
         assertNull(responses.get(0).getDetalles().get(0).getNombreProducto());
-        verify(inventarioService, times(1)).buscarEmpleado(2L);
-        verify(inventarioService, never()).buscarDeposito(anyLong());
-        verify(inventarioService, never()).buscarProducto(anyLong());
+        verify(inventarioService, times(1)).mostrarEmpleado(2L);
+        verify(inventarioService, never()).mostrarDeposito(anyLong());
+        verify(inventarioService, never()).mostrarProducto(anyLong());
     }
 
     @Test
@@ -120,7 +120,7 @@ class FacturaVentaResponseAssemblerTest {
 
         assertNull(response.getEmpleado());
         assertNull(response.getDeposito());
-        verify(inventarioService, never()).buscarProducto(anyLong());
+        verify(inventarioService, never()).mostrarProducto(anyLong());
     }
 
     /** Factura del empleado 2 en el depósito 3; el mapper solo entrega los ID de producto. */
