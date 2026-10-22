@@ -18,16 +18,33 @@
     <description>Microservicio de ventas de Distrimarket</description>
 
     <properties>
+        <spring-cloud.version>2023.0.1</spring-cloud.version>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <distrimarket-common.version>1.0.0-SNAPSHOT</distrimarket-common.version>
+        <distrimarket-common.version>1.0.1-SNAPSHOT</distrimarket-common.version>
         <springdoc.version>2.3.0</springdoc.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <liquibase.version>4.27.0</liquibase.version>
         <maven.compiler.parameters>true</maven.compiler.parameters>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.distrimarket</groupId>
             <artifactId>distrimarket-common</artifactId>

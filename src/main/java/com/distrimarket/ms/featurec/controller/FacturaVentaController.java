@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/facturas-venta")
+@RequestMapping({"/facturas-venta", "/facturas"})
 @Tag(name = "Facturas-Venta")
 public class FacturaVentaController
         extends BaseController<FacturaVentaRequestDTO, FacturaVentaResponseDTO, FacturaVenta> {
