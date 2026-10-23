@@ -57,12 +57,11 @@ public class CacheConfig implements CachingConfigurer {
     public static final String MEDIO_PAGO = "medio-pago";
     /** TimbradoDTO por id. Catálogo estable: persistente. */
     public static final String TIMBRADO = "timbrado";
-    /** FacturaVentaResponseDTO por id; muestra cliente, medio de pago, timbrado y datos de inventario. */
+    /**
+     * FacturaVentaResponseDTO por id (con sus líneas). Muestra el nombre del cliente, del medio
+     * de pago y el timbrado: se invalida completa cuando cambia alguno de ellos.
+     */
     public static final String FACTURA_VENTA = "factura-venta";
-    /** Datos de inventario que ventas solo muestra (no se usan para validar una venta). */
-    public static final String INVENTARIO_PRODUCTO = "inventario-producto";
-    public static final String INVENTARIO_EMPLEADO = "inventario-empleado";
-    public static final String INVENTARIO_DEPOSITO = "inventario-deposito";
 
     /**
      * Parámetros de application.yml (prefijo {@code distrimarket.cache}).

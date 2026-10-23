@@ -8,8 +8,6 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 
 public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
@@ -27,18 +25,6 @@ public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
             "medioPago", "timbrado"
     })
     Page<FacturaVenta> findAll(Specification<FacturaVenta> specification, Pageable pageable);
-
-    @Query("""
-            select distinct factura
-            from FacturaVenta factura
-            left join fetch factura.detalles detalle
-            left join fetch factura.cliente cliente
-            left join fetch cliente.persona
-            left join fetch factura.medioPago
-            left join fetch factura.timbrado
-            where factura.id in :ids
-            """)
-    List<FacturaVenta> findDetailedByIdIn(@Param("ids") Collection<Long> ids);
 
     @Query("""
             select distinct factura

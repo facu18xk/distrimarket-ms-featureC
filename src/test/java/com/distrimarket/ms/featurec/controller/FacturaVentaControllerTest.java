@@ -3,6 +3,7 @@ package com.distrimarket.ms.featurec.controller;
 import com.distrimarket.commons.dto.EstadoFacturaVenta;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
+import com.distrimarket.commons.dto.FacturaVentaResumenDTO;
 import com.distrimarket.commons.entity.FacturaVenta;
 import com.distrimarket.ms.featurec.exception.GlobalExceptionHandler;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
@@ -59,18 +60,18 @@ class FacturaVentaControllerTest {
     @Test
     void listMapsTheCompleteInvoiceIncludingItsDetails() throws Exception {
         FacturaVenta invoice = new FacturaVenta();
-        FacturaVentaResponseDTO response = new FacturaVentaResponseDTO();
+        FacturaVentaResumenDTO response = new FacturaVentaResumenDTO();
         when(service.search(nullable(String.class), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(invoice), PageRequest.of(0, 10), 1));
-        when(service.toResponsesCacheados(List.of(invoice))).thenReturn(List.of(response));
+        when(service.toResumenes(List.of(invoice))).thenReturn(List.of(response));
 
         mvc.perform(get("/facturas-venta").param("page", "0").param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content.length()").value(1));
 
-        // La respuesta la arma el servicio (con datos de inventario) y guarda cada factura en caché.
-        verify(service).toResponsesCacheados(List.of(invoice));
+        // El listado devuelve solo cabeceras; el detalle se pide por id.
+        verify(service).toResumenes(List.of(invoice));
     }
 
     @Test

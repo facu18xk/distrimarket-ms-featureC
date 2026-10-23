@@ -3,6 +3,7 @@ package com.distrimarket.ms.featurec.service;
 import com.distrimarket.commons.entity.FacturaVenta;
 import com.distrimarket.commons.entity.FacturaVentaDetalle;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
+import com.distrimarket.commons.dto.FacturaVentaResumenDTO;
 import com.distrimarket.commons.entity.BaseEntity;
 import com.distrimarket.commons.entity.Cliente;
 import com.distrimarket.commons.entity.Deposito;
@@ -28,7 +29,6 @@ import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.repository.MedioPagoRepository;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -49,8 +49,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 public class FacturaVentaService
@@ -61,7 +59,6 @@ public class FacturaVentaService
     private final FacturaVentaRepository repository;
     private final MedioPagoRepository medioPagoRepository;
     private final InventarioService inventarioService;
-    private final FacturaVentaResponseAssembler responseAssembler;
     private final EntityManager entityManager;
 
     public FacturaVentaService(
@@ -69,37 +66,23 @@ public class FacturaVentaService
             FacturaVentaMapper mapper,
             MedioPagoRepository medioPagoRepository,
             InventarioService inventarioService,
-            FacturaVentaResponseAssembler responseAssembler,
             EntityManager entityManager) {
         super(repository, mapper, "Factura de venta");
-        this.responseAssembler = responseAssembler;
         this.repository = repository;
         this.medioPagoRepository = medioPagoRepository;
         this.inventarioService = inventarioService;
         this.entityManager = entityManager;
     }
 
-    @Override
-    public FacturaVentaResponseDTO toResponse(FacturaVenta factura) {
-        return responseAssembler.toResponse(factura);
+    /**
+     * Cabeceras para un listado. No llevan líneas ni datos de inventario: el detalle de una
+     * factura se pide por id cuando se abre (y queda en caché).
+     */
+    public List<FacturaVentaResumenDTO> toResumenes(List<FacturaVenta> facturas) {
+        return facturas.stream().map(mapper::toResumen).toList();
     }
 
-    @Override
-    public List<FacturaVentaResponseDTO> toResponses(List<FacturaVenta> facturas) {
-        return responseAssembler.toResponses(facturas);
-    }
-
-    // --- Caché (dominio "factura-venta", TTL corto: incluye datos de inventario) ---
-
-    @Override
-    protected String cacheName() {
-        return CacheConfig.FACTURA_VENTA;
-    }
-
-    @Override
-    protected Object cacheKey(FacturaVentaResponseDTO response) {
-        return response.getIdFacturaVenta();
-    }
+    // --- Caché (dominio "factura-venta"): la factura completa, por id ---
 
     @Override
     @Cacheable(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
@@ -289,27 +272,9 @@ public class FacturaVentaService
         Pageable sortedPageable = PageableSortSupport.allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion",
                 "numeroFactura", "fechaEmision", "estado", "totalIva", "totalGeneral");
-        Page<FacturaVenta> headers = search(specification, sortedPageable);
-        if (headers.isEmpty()) {
-            return headers;
-        }
-
-        var invoiceIds = headers.getContent().stream()
-                .map(FacturaVenta::getId)
-                .toList();
-        Map<Long, FacturaVenta> detailedById = repository.findDetailedByIdIn(invoiceIds).stream()
-                .collect(Collectors.toMap(FacturaVenta::getId, Function.identity()));
-        var detailedContent = headers.getContent().stream()
-                .map(header -> {
-                    FacturaVenta detailed = detailedById.get(header.getId());
-                    if (detailed == null) {
-                        throw new IllegalStateException(
-                                "No se pudieron cargar los detalles de la factura " + header.getId() + ".");
-                    }
-                    return detailed;
-                })
-                .toList();
-        return new PageImpl<>(detailedContent, headers.getPageable(), headers.getTotalElements());
+        // Solo cabeceras (con cliente, medio de pago y timbrado por EntityGraph): las líneas
+        // no se cargan en un listado.
+        return search(specification, sortedPageable);
     }
 
     @Override

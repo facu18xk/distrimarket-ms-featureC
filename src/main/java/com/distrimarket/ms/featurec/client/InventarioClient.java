@@ -15,10 +15,12 @@ import java.util.List;
 
 /**
  * Acceso al microservicio de inventario, dueño de productos, depósitos, empleados y stock.
- * El nombre se resuelve por Eureka; ventas no consulta esas tablas por su cuenta.
+ * Se llama a la URL de {@code inventario.url}; si está vacía, el nombre se resuelve por Eureka.
+ * Ventas no consulta esas tablas por su cuenta.
  */
 @FeignClient(
         name = "${inventario.service-name}",
+        url = "${inventario.url:}",
         path = "${inventario.context-path}",
         configuration = InventarioClientConfiguration.class)
 public interface InventarioClient {

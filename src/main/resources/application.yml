@@ -121,15 +121,13 @@ distrimarket:
       medio-pago: ${CACHE_TTL_MEDIO_PAGO:0}
       timbrado: ${CACHE_TTL_TIMBRADO:0}
       cliente: ${CACHE_TTL_CLIENTE:30m}
-      # La factura incluye datos de inventario que pueden cambiar en otro microservicio.
-      factura-venta: ${CACHE_TTL_FACTURA_VENTA:10m}
-      # Datos de inventario solo para mostrar; ventas no se entera cuando cambian.
-      inventario-producto: ${CACHE_TTL_INVENTARIO_PRODUCTO:5m}
-      inventario-empleado: ${CACHE_TTL_INVENTARIO_EMPLEADO:30m}
-      inventario-deposito: ${CACHE_TTL_INVENTARIO_DEPOSITO:60m}
+      # Factura completa por id. Solo lleva datos de ventas (de inventario, solo ids).
+      factura-venta: ${CACHE_TTL_FACTURA_VENTA:30m}
 
-# Microservicio de inventario: se ubica por su nombre en Eureka
+# Microservicio de inventario. Con INVENTARIO_URL (por defecto) se llama por URL fija;
+# vacío, se ubica por su nombre en Eureka (service-name).
 inventario:
+  url: ${INVENTARIO_URL:http://localhost:8081}
   service-name: ${INVENTARIO_SERVICE_NAME:distrimarket-inventario}
   context-path: ${INVENTARIO_CONTEXT_PATH:/inventario}
 
@@ -177,6 +175,8 @@ pagination:
 
 eureka:
   client:
+    # El gateway todavía enruta por Eureka; sin servidor Eureka, EUREKA_ENABLED=false.
+    enabled: ${EUREKA_ENABLED:true}
     service-url:
       defaultZone: http://localhost:8761/eureka/
     register-with-eureka: true

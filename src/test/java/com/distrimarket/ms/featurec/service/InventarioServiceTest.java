@@ -2,8 +2,6 @@ package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.dto.ProductoResponseDTO;
 import com.distrimarket.commons.dto.StockMovimientoRequestDTO;
-import com.distrimarket.ms.featurec.config.CacheConfig;
-import com.distrimarket.ms.featurec.config.DomainCache;
 import com.distrimarket.ms.featurec.client.InventarioClient;
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
@@ -31,8 +29,6 @@ class InventarioServiceTest {
 
     @Mock
     private InventarioClient inventarioClient;
-    @Mock
-    private DomainCache domainCache;
     @InjectMocks
     private InventarioService service;
 
@@ -42,8 +38,6 @@ class InventarioServiceTest {
         when(inventarioClient.obtenerProducto(7L)).thenReturn(producto);
 
         assertSame(producto, service.obtenerProducto(7L));
-        // El dato fresco de una validación reemplaza al que se muestra desde caché.
-        org.mockito.Mockito.verify(domainCache).put(CacheConfig.INVENTARIO_PRODUCTO, 7L, producto);
     }
 
     @Test
@@ -64,11 +58,9 @@ class InventarioServiceTest {
     void buscarDevuelveVacioCuandoInventarioYaNoOfreceElRecurso() {
         when(inventarioClient.obtenerProducto(7L)).thenThrow(new ResourceNotFoundException("Recurso no encontrado"));
         when(inventarioClient.obtenerDeposito(3L)).thenThrow(new ResourceNotFoundException("Recurso no encontrado"));
-        when(inventarioClient.obtenerEmpleado(2L)).thenThrow(new ResourceNotFoundException("Recurso no encontrado"));
 
         assertTrue(service.buscarProducto(7L).isEmpty());
         assertTrue(service.buscarDeposito(3L).isEmpty());
-        assertTrue(service.buscarEmpleado(2L).isEmpty());
     }
 
     @Test
@@ -104,6 +96,7 @@ class InventarioServiceTest {
         StockMovimientoRequestDTO movimiento = enviado.getValue();
         assertEquals(3L, movimiento.getIdDeposito());
         assertEquals("Venta factura 001", movimiento.getMotivo());
+        assertEquals(com.distrimarket.commons.dto.OrigenMovimientoStock.VENTA, movimiento.getOrigen());
         assertEquals(2, movimiento.getDetalles().size());
         assertEquals(7L, movimiento.getDetalles().get(0).getIdProducto());
         assertEquals(-2, movimiento.getDetalles().get(0).getCantidad());

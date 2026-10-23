@@ -38,6 +38,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,7 +48,7 @@ class FacturaVentaServiceSearchTest {
     @Mock private FacturaVentaMapper mapper;
     @Mock private MedioPagoRepository medioPagoRepository;
     @Mock private InventarioService inventarioService;
-    @Mock private FacturaVentaResponseAssembler responseAssembler;
+
     @Mock private EntityManager entityManager;
 
     private FacturaVentaService service;
@@ -56,7 +57,7 @@ class FacturaVentaServiceSearchTest {
     void setUp() {
         service = new FacturaVentaService(
                 repository, mapper,
-                medioPagoRepository, inventarioService, responseAssembler, entityManager);
+                medioPagoRepository, inventarioService, entityManager);
     }
 
     @Test
@@ -162,7 +163,7 @@ class FacturaVentaServiceSearchTest {
     }
 
     @Test
-    void searchLoadsDetailsForThePageWithoutChangingItsOrderOrTotals() {
+    void searchReturnsOnlyHeadersAndKeepsOrderAndTotals() {
         Pageable pageable = PageRequest.of(0, 2, Sort.by(Sort.Direction.ASC, "id"));
         FacturaVenta firstHeader = invoice(1L);
         FacturaVenta secondHeader = invoice(2L);
@@ -170,19 +171,13 @@ class FacturaVentaServiceSearchTest {
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(
                         List.of(firstHeader, secondHeader), pageable, 2));
 
-        FacturaVenta firstDetailed = invoiceWithDetail(1L, 101L);
-        FacturaVenta secondDetailed = invoiceWithDetail(2L, 202L);
-        when(repository.findDetailedByIdIn(List.of(1L, 2L)))
-                .thenReturn(List.of(secondDetailed, firstDetailed));
-
         Page<FacturaVenta> results = service.search((String) null, pageable);
 
+        // El listado son cabeceras: las líneas se cargan solo al pedir una factura por id.
         assertEquals(2, results.getTotalElements());
-        assertSame(firstDetailed, results.getContent().get(0));
-        assertSame(secondDetailed, results.getContent().get(1));
-        assertEquals(101L, results.getContent().get(0).getDetalles().get(0).getId());
-        assertEquals(202L, results.getContent().get(1).getDetalles().get(0).getId());
-        verify(repository).findDetailedByIdIn(List.of(1L, 2L));
+        assertSame(firstHeader, results.getContent().get(0));
+        assertSame(secondHeader, results.getContent().get(1));
+        verify(repository, never()).findDetailedById(any());
     }
 
     private FacturaVenta invoice(Long id) {

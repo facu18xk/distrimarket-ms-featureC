@@ -4,6 +4,7 @@ import com.distrimarket.commons.dto.DepositoResponseDTO;
 import com.distrimarket.commons.dto.EmpleadoResponseDTO;
 import com.distrimarket.commons.dto.EstadoFacturaVenta;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
+import com.distrimarket.commons.dto.FacturaVentaResumenDTO;
 import com.distrimarket.commons.dto.ProductoResponseDTO;
 import com.distrimarket.commons.entity.Cliente;
 import com.distrimarket.commons.entity.Deposito;
@@ -53,6 +54,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,8 +71,6 @@ class FacturaVentaServiceTest {
     @Mock
     private InventarioService inventarioService;
     @Mock
-    private FacturaVentaResponseAssembler responseAssembler;
-    @Mock
     private EntityManager entityManager;
 
     private FacturaVentaService service;
@@ -82,7 +82,6 @@ class FacturaVentaServiceTest {
                 facturaMapper,
                 medioPagoRepository,
                 inventarioService,
-                responseAssembler,
                 entityManager);
         // Las referencias JPA a entidades de inventario solo llevan el ID.
         lenient().when(entityManager.getReference(eq(Producto.class), anyLong()))
@@ -341,14 +340,17 @@ class FacturaVentaServiceTest {
     }
 
     @Test
-    void responsesAreBuiltByTheAssemblerSoInventoryDataIsIncluded() {
+    void responsesComeFromTheMapperWithoutCallingInventory() {
         FacturaVenta invoice = invoiceWithTwoDetails();
         FacturaVentaResponseDTO response = new FacturaVentaResponseDTO();
-        when(responseAssembler.toResponse(invoice)).thenReturn(response);
-        when(responseAssembler.toResponses(List.of(invoice))).thenReturn(List.of(response));
+        FacturaVentaResumenDTO resumen = new FacturaVentaResumenDTO();
+        when(facturaMapper.toDto(invoice)).thenReturn(response);
+        when(facturaMapper.toResumen(invoice)).thenReturn(resumen);
 
         assertSame(response, service.toResponse(invoice));
-        assertSame(response, service.toResponses(List.of(invoice)).get(0));
+        assertSame(resumen, service.toResumenes(List.of(invoice)).get(0));
+        // Mostrar una factura no consulta a inventario: lleva solo los ids de sus datos.
+        verifyNoInteractions(inventarioService);
     }
 
     @Test

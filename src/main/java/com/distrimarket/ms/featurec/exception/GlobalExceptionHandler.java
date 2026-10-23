@@ -42,6 +42,12 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta operación.", request, null);
     }
 
+    @ExceptionHandler(InventarioAccesoDenegadoException.class)
+    public ResponseEntity<ApiErrorResponse> handleInventarioDenied(
+            InventarioAccesoDenegadoException ex, HttpServletRequest request) {
+        return buildResponse(HttpStatus.FORBIDDEN, ex.getMessage(), request, null);
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiErrorResponse> handleAuthentication(AuthenticationException ex, HttpServletRequest request) {
         return buildResponse(HttpStatus.UNAUTHORIZED, "Se requiere iniciar sesión.", request, null);

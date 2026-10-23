@@ -1,6 +1,7 @@
 package com.distrimarket.ms.featurec.client;
 
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
+import com.distrimarket.ms.featurec.exception.InventarioAccesoDenegadoException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +27,13 @@ public class InventarioErrorDecoder implements ErrorDecoder {
     @Override
     public Exception decode(String methodKey, Response response) {
         int status = response.status();
+        if (status == 401 || status == 403) {
+            // Ventas reenvía el token del usuario: inventario decide según su rol.
+            log.warn("Inventario rechazó por permisos ({}) la llamada {}", status, methodKey);
+            return new InventarioAccesoDenegadoException(
+                    "Inventario no permite esta operación con su usuario (" + status + "). "
+                            + "Revise los roles habilitados en inventario.");
+        }
         if (status != 400 && status != 404 && status != 409) {
             // Fallos del propio inventario (5xx): los atiende el manejador global como servicio no disponible.
             return porDefecto.decode(methodKey, response);

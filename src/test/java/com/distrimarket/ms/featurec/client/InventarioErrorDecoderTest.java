@@ -1,6 +1,7 @@
 package com.distrimarket.ms.featurec.client;
 
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
+import com.distrimarket.ms.featurec.exception.InventarioAccesoDenegadoException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import feign.FeignException;
 import feign.Request;
@@ -14,6 +15,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class InventarioErrorDecoderTest {
+
+    @Test
+    void unRechazoPorPermisosDeInventarioNoSeConfundeConUnaCaida() {
+        for (int status : new int[]{401, 403}) {
+            Response response = Response.builder()
+                    .status(status)
+                    .reason("Forbidden")
+                    .request(Request.create(Request.HttpMethod.POST, "/inventario/stock-depositos/movimientos",
+                            Map.of(), null, StandardCharsets.UTF_8, null))
+                    .headers(Map.of())
+                    .build();
+
+            Exception exception = new InventarioErrorDecoder().decode("InventarioClient#aplicarMovimientos", response);
+
+            assertInstanceOf(InventarioAccesoDenegadoException.class, exception);
+        }
+    }
 
     private final InventarioErrorDecoder decoder = new InventarioErrorDecoder();
 

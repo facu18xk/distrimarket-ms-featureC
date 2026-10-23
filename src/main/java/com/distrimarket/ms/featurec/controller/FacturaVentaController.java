@@ -68,7 +68,8 @@ public class FacturaVentaController
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(contenido(result.getContent()));
+        // Solo cabeceras; el detalle (con sus líneas) se pide por id.
+        response.setContent(facturaVentaService.toResumenes(result.getContent()));
         return response;
     }
 
