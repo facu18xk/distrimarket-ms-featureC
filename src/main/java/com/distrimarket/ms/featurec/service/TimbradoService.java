@@ -1,10 +1,16 @@
 package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.entity.Timbrado;
+import com.distrimarket.ms.featurec.config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import com.distrimarket.commons.dto.TimbradoCreateDTO;
 import com.distrimarket.commons.dto.TimbradoDTO;
 import com.distrimarket.ms.featurec.repository.TimbradoRepository;
 import com.distrimarket.ms.featurec.mapper.TimbradoMapper;
+import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.config.SearchQuerySupport;
 import jakarta.persistence.criteria.Predicate;
@@ -24,6 +30,47 @@ public class TimbradoService extends AbstractBaseService<
         super(repository, mapper, "Timbrado");
     }
 
+    // --- Caché (dominio "timbrado", persistente) ---
+
+    @Override
+    protected String cacheName() {
+        return CacheConfig.TIMBRADO;
+    }
+
+    @Override
+    protected Object cacheKey(TimbradoDTO response) {
+        return response.getIdTimbrado();
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheConfig.TIMBRADO, key = "#id")
+    public TimbradoDTO obtener(Long id) {
+        return super.obtener(id);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.TIMBRADO, key = "#result.idTimbrado")
+    public TimbradoDTO crear(TimbradoCreateDTO request) {
+        return super.crear(request);
+    }
+
+    // Las facturas en caché muestran el timbrado: esa sección también se invalida.
+    @Override
+    @Caching(
+            put = @CachePut(cacheNames = CacheConfig.TIMBRADO, key = "#id"),
+            evict = @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true))
+    public TimbradoDTO actualizar(Long id, TimbradoCreateDTO request) {
+        return super.actualizar(id, request);
+    }
+
+    @Override
+    @Caching(evict = {
+            @CacheEvict(cacheNames = CacheConfig.TIMBRADO, key = "#id"),
+            @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, allEntries = true)})
+    public void eliminar(Long id) {
+        super.eliminar(id);
+    }
+
     @Override
     protected void copiarCambios(Timbrado target, Timbrado source) {
         target.setNumeroTimbrado(source.getNumeroTimbrado());
@@ -31,7 +78,16 @@ public class TimbradoService extends AbstractBaseService<
         target.setFechaVencimiento(source.getFechaVencimiento());
         target.setPuntoExpedicion(source.getPuntoExpedicion());
         target.setSucursal(source.getSucursal());
-        target.setActivo(source.getActivo());
+        // El campo activo no se modifica por PUT: la baja lógica solo ocurre con DELETE.
+    }
+
+    @Override
+    @Transactional
+    public Timbrado create(Timbrado entity) {
+        if (entity != null) {
+            entity.setActivo(true);
+        }
+        return super.create(entity);
     }
 
     @Override
@@ -56,8 +112,20 @@ public class TimbradoService extends AbstractBaseService<
         if (entity.getFechaInicio() == null || entity.getFechaVencimiento() == null) {
             throw new IllegalArgumentException("El período de vigencia del timbrado es obligatorio.");
         }
+        log.debug("Validando vigencia del timbrado {}: {} a {}",
+                entity.getNumeroTimbrado(), entity.getFechaInicio(), entity.getFechaVencimiento());
         if (entity.getFechaVencimiento().isBefore(entity.getFechaInicio())) {
             throw new IllegalArgumentException("La fecha de vencimiento no puede ser anterior a la fecha de inicio.");
+        }
+        String numeroTimbrado = entity.getNumeroTimbrado().trim();
+        entity.setNumeroTimbrado(numeroTimbrado);
+        // El número es único en la base aunque el timbrado anterior esté dado de baja.
+        boolean duplicado = entity.getId() == null
+                ? repository.existsByNumeroTimbrado(numeroTimbrado)
+                : repository.existsByNumeroTimbradoAndIdNot(numeroTimbrado, entity.getId());
+        if (duplicado) {
+            log.warn("Intento de registrar un número de timbrado duplicado: {}", numeroTimbrado);
+            throw new ConflictException("Ya existe un timbrado con ese número.");
         }
         if (entity.getActivo() == null) {
             entity.setActivo(true);

@@ -1,14 +1,15 @@
 package com.distrimarket.ms.featurec.controller;
 
 import com.distrimarket.commons.dto.MedioPagoDTO;
-import com.distrimarket.commons.dto.PageResponseDTO;
+import com.distrimarket.commons.dto.MedioPagoPageResponseDTO;
+import com.distrimarket.commons.dto.MedioPagoRequestDTO;
 import com.distrimarket.commons.entity.MedioPago;
 import com.distrimarket.ms.featurec.mapper.MedioPagoMapper;
 import com.distrimarket.ms.featurec.service.MedioPagoService;
-import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,13 +23,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/medios-pago")
 @Tag(name = "Medios de pago")
-public class MedioPagoController extends BaseController<MedioPagoDTO, MedioPagoDTO, MedioPago> {
+@PreAuthorize("hasRole('ADMIN')")
+public class MedioPagoController extends BaseController<MedioPagoRequestDTO, MedioPagoDTO, MedioPago> {
 
     private final MedioPagoService medioPagoService;
 
@@ -37,27 +38,36 @@ public class MedioPagoController extends BaseController<MedioPagoDTO, MedioPagoD
         this.medioPagoService = service;
     }
 
+    // Consultar: también vendedores y compradores (lo usan al facturar). Modificar: solo ADMIN.
     @GetMapping
-    @Operation(operationId = "listMediosPago")
-    public PageResponseDTO<MedioPagoDTO> listar(
-            @RequestBody(required = false) Map<String, Object> filter,
-            @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
+    @Operation(operationId = "listarMediosPago")
+    @PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR', 'COMPRADOR')")
+    public MedioPagoPageResponseDTO listar(
+            @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
-        String query = SearchFilterSupport.query(filter, legacyQuery);
         var result = medioPagoService.search(query, allowSorts(pageable,
                 "id", "nombre", "activo", "fechaCreacion", "fechaModificacion"));
-        return PageResponseDTO.from(result.map(mapper()::toDto));
+        MedioPagoPageResponseDTO response = new MedioPagoPageResponseDTO();
+        response.setPageNumber(result.getNumber());
+        response.setPageSize(result.getSize());
+        response.setTotalElements(result.getTotalElements());
+        response.setTotalPages(result.getTotalPages());
+        response.setIsFirst(result.isFirst());
+        response.setIsLast(result.isLast());
+        response.setContent(contenido(result.getContent()));
+        return response;
     }
 
     @Override
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR', 'COMPRADOR')")
     public MedioPagoDTO get(@PathVariable Long id) {
         return super.get(id);
     }
 
     @Override
     @PostMapping
-    public ResponseEntity<MedioPagoDTO> create(@RequestBody MedioPagoDTO request) {
+    public ResponseEntity<MedioPagoDTO> create(@Valid @RequestBody MedioPagoRequestDTO request) {
         return super.create(request);
     }
 
@@ -65,7 +75,7 @@ public class MedioPagoController extends BaseController<MedioPagoDTO, MedioPagoD
     @PutMapping("/{id}")
     public MedioPagoDTO update(
             @PathVariable Long id,
-            @RequestBody MedioPagoDTO request) {
+            @Valid @RequestBody MedioPagoRequestDTO request) {
         return super.update(id, request);
     }
 

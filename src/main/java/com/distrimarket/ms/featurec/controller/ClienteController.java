@@ -2,11 +2,11 @@ package com.distrimarket.ms.featurec.controller;
 
 import com.distrimarket.commons.entity.Cliente;
 import com.distrimarket.commons.dto.ClientePageResponseDTO;
+import com.distrimarket.commons.dto.ClientePatchRequestDTO;
 import com.distrimarket.commons.dto.ClienteRequestDTO;
 import com.distrimarket.commons.dto.ClienteResponseDTO;
 import com.distrimarket.ms.featurec.service.ClienteService;
 import com.distrimarket.ms.featurec.mapper.ClienteMapper;
-import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,28 +25,28 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/clientes")
 @Tag(name = "Clientes")
+@PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR')")
 public class ClienteController extends BaseController<ClienteRequestDTO, ClienteResponseDTO, Cliente> {
 
     private final ClienteService clienteService;
+    private final ClienteMapper clienteMapper;
 
     public ClienteController(ClienteService service, ClienteMapper mapper) {
         super(service, mapper);
         this.clienteService = service;
+        this.clienteMapper = mapper;
     }
 
     @GetMapping
-    @Operation(operationId = "listClientes")
+    @Operation(operationId = "listarClientes")
     public ClientePageResponseDTO listar(
-            @RequestBody(required = false) Map<String, Object> filter,
-            @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
+            @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
-        String query = SearchFilterSupport.query(filter, legacyQuery);
         var result = clienteService.search(query, allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion", "estado",
                 "persona.nombreCompleto", "persona.tipoPersona", "persona.ci", "persona.ruc"));
@@ -56,7 +57,7 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(result.map(mapper()::toDto).getContent());
+        response.setContent(contenido(result.getContent()));
         return response;
     }
 
@@ -80,9 +81,19 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
         return super.update(id, request);
     }
 
+    // Sin @Valid: en una actualización parcial los campos obligatorios de persona pueden omitirse.
+    @PatchMapping("/{id}")
+    public ClienteResponseDTO actualizarParcialmente(
+            @PathVariable Long id,
+            @RequestBody ClientePatchRequestDTO request) {
+        return clienteService.parchear(id, request);
+    }
+
+    // Dar de baja un cliente queda para el administrador (regla a nivel de método).
     @Override
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
     public void delete(@PathVariable Long id) {
         super.delete(id);
     }

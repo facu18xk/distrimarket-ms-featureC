@@ -3,49 +3,52 @@ package com.distrimarket.ms.featurec.service;
 import com.distrimarket.commons.entity.FacturaVenta;
 import com.distrimarket.commons.entity.FacturaVentaDetalle;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
+import com.distrimarket.commons.dto.FacturaVentaResumenDTO;
 import com.distrimarket.commons.entity.BaseEntity;
 import com.distrimarket.commons.entity.Cliente;
 import com.distrimarket.commons.entity.Deposito;
 import com.distrimarket.commons.entity.Empleado;
 import com.distrimarket.commons.entity.MedioPago;
 import com.distrimarket.commons.entity.Producto;
-import com.distrimarket.commons.entity.StockDeposito;
 import com.distrimarket.commons.entity.Timbrado;
+import com.distrimarket.commons.dto.DepositoResponseDTO;
 import com.distrimarket.commons.dto.EstadoFacturaVenta;
+import com.distrimarket.commons.dto.ProductoResponseDTO;
+import com.distrimarket.ms.featurec.config.CacheConfig;
 import com.distrimarket.ms.featurec.config.PageableSortSupport;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
 import com.distrimarket.ms.featurec.config.SearchQuerySupport;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.ms.featurec.exception.BusinessRuleException;
 import com.distrimarket.ms.featurec.exception.ConflictException;
 import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
-import com.distrimarket.ms.featurec.repository.DepositoRepository;
 import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.repository.MedioPagoRepository;
-import com.distrimarket.ms.featurec.repository.ProductoRepository;
-import com.distrimarket.ms.featurec.repository.StockDepositoRepository;
 import jakarta.persistence.EntityManager;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
-import java.util.Comparator;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.TreeMap;
 
 @Service
 public class FacturaVentaService
@@ -55,30 +58,66 @@ public class FacturaVentaService
 
     private final FacturaVentaRepository repository;
     private final MedioPagoRepository medioPagoRepository;
-    private final ProductoRepository productoRepository;
-    private final DepositoRepository depositoRepository;
-    private final StockDepositoRepository stockDepositoRepository;
+    private final InventarioService inventarioService;
     private final EntityManager entityManager;
 
     public FacturaVentaService(
             FacturaVentaRepository repository,
             FacturaVentaMapper mapper,
             MedioPagoRepository medioPagoRepository,
-            ProductoRepository productoRepository,
-            DepositoRepository depositoRepository,
-            StockDepositoRepository stockDepositoRepository,
+            InventarioService inventarioService,
             EntityManager entityManager) {
         super(repository, mapper, "Factura de venta");
         this.repository = repository;
         this.medioPagoRepository = medioPagoRepository;
-        this.productoRepository = productoRepository;
-        this.depositoRepository = depositoRepository;
-        this.stockDepositoRepository = stockDepositoRepository;
+        this.inventarioService = inventarioService;
         this.entityManager = entityManager;
+    }
+
+    /**
+     * Cabeceras para un listado. No llevan líneas ni datos de inventario: el detalle de una
+     * factura se pide por id cuando se abre (y queda en caché).
+     */
+    public List<FacturaVentaResumenDTO> toResumenes(List<FacturaVenta> facturas) {
+        return facturas.stream().map(mapper::toResumen).toList();
+    }
+
+    // --- Caché (dominio "factura-venta"): la factura completa, por id ---
+
+    @Override
+    @Cacheable(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    public FacturaVentaResponseDTO obtener(Long id) {
+        return super.obtener(id);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#result.idFacturaVenta")
+    public FacturaVentaResponseDTO crear(FacturaVentaRequestDTO request) {
+        return super.crear(request);
+    }
+
+    @Override
+    @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    public FacturaVentaResponseDTO actualizar(Long id, FacturaVentaRequestDTO request) {
+        return super.actualizar(id, request);
+    }
+
+    /** Anular o volver a emitir: la factura en caché se reemplaza por la nueva versión. */
+    @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    @Transactional
+    public FacturaVentaResponseDTO cambiarEstado(Long id, EstadoFacturaVenta estado) {
+        return toResponse(actualizarEstado(id, estado));
+    }
+
+    @Override
+    @CacheEvict(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
+    public void eliminar(Long id) {
+        super.eliminar(id);
     }
 
     private void validarEditable(FacturaVenta factura) {
         if ("ANULADA".equalsIgnoreCase(factura.getEstado())) {
+            log.warn("Intento de modificar la factura anulada {}", factura.getId());
             throw new ConflictException("No se puede modificar una factura anulada.");
         }
     }
@@ -86,6 +125,7 @@ public class FacturaVentaService
     @Override
     @Transactional(readOnly = true)
     public FacturaVenta get(Long id) {
+        validarId(id);
         FacturaVenta factura = repository.findDetailedById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Factura de venta", id));
         return validarActivo(factura, id);
@@ -100,9 +140,12 @@ public class FacturaVentaService
             entity.setActivo(true);
         }
         resolverReferencias(entity);
+        validarNumeroUnico(entity, null);
         prepararDetalles(entity);
-        ajustarStock(stockChanges(entity, 1));
+        ajustarStock(stockChanges(entity, 1), "Venta factura " + entity.getNumeroFactura());
         entity.recalcularTotales();
+        log.debug("Totales de la factura {}: iva={} general={}",
+                entity.getNumeroFactura(), entity.getTotalIva(), entity.getTotalGeneral());
         log.info("Emitiendo factura de venta {}", entity.getNumeroFactura());
         FacturaVenta guardada = repository.saveAndFlush(entity);
         return repository.findDetailedById(guardada.getId()).orElse(guardada);
@@ -114,6 +157,7 @@ public class FacturaVentaService
         FacturaVenta invoice = get(id);
         copiarCambios(invoice, changes);
         validar(invoice);
+        log.info("Actualizando Factura de venta {}", id);
         repository.saveAndFlush(invoice);
         return repository.findDetailedById(id).orElse(invoice);
     }
@@ -124,12 +168,16 @@ public class FacturaVentaService
             throw new IllegalArgumentException("El estado de la factura es obligatorio.");
         }
         FacturaVenta factura = get(id);
+        if (estado.name().equalsIgnoreCase(factura.getEstado())) {
+            log.warn("Intento de cambiar la factura {} al estado que ya tiene: {}", id, estado);
+            throw new ConflictException("La factura ya se encuentra en estado " + estado.name() + ".");
+        }
         if (EstadoFacturaVenta.EMITIDA.name().equals(factura.getEstado())
                 && estado == EstadoFacturaVenta.ANULADA) {
-            ajustarStock(stockChanges(factura, -1));
+            reponerStock(factura, "Anulación de factura " + factura.getNumeroFactura());
         } else if (EstadoFacturaVenta.ANULADA.name().equals(factura.getEstado())
                 && estado == EstadoFacturaVenta.EMITIDA) {
-            ajustarStock(stockChanges(factura, 1));
+            ajustarStock(stockChanges(factura, 1), "Reemisión de factura " + factura.getNumeroFactura());
         }
         factura.setEstado(estado.name());
         log.info("Actualizando estado de factura {} a {}", factura.getNumeroFactura(), estado);
@@ -140,7 +188,46 @@ public class FacturaVentaService
     public Page<FacturaVenta> search(
             String query,
             Pageable pageable) {
-        Specification<FacturaVenta> specification = (root, criteriaQuery, builder) -> builder.conjunction();
+        return search(query, null, null, null, null, null, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FacturaVenta> search(
+            String query,
+            Long idCliente,
+            Long idEmpleado,
+            Long idDeposito,
+            EstadoFacturaVenta estado,
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            Pageable pageable) {
+        if (fechaDesde != null && fechaHasta != null && fechaHasta.isBefore(fechaDesde)) {
+            throw new IllegalArgumentException("fechaHasta no puede ser anterior a fechaDesde.");
+        }
+        Specification<FacturaVenta> specification = (root, criteriaQuery, builder) -> {
+            var filters = new ArrayList<jakarta.persistence.criteria.Predicate>();
+            if (idCliente != null) {
+                filters.add(builder.equal(root.get("cliente").get("id"), idCliente));
+            }
+            if (idEmpleado != null) {
+                filters.add(builder.equal(root.get("empleado").get("id"), idEmpleado));
+            }
+            if (idDeposito != null) {
+                filters.add(builder.equal(root.get("deposito").get("id"), idDeposito));
+            }
+            if (estado != null) {
+                filters.add(builder.equal(root.get("estado"), estado.name()));
+            }
+            if (fechaDesde != null) {
+                filters.add(builder.greaterThanOrEqualTo(root.get("fechaEmision"), fechaDesde));
+            }
+            if (fechaHasta != null) {
+                filters.add(builder.lessThanOrEqualTo(root.get("fechaEmision"), fechaHasta));
+            }
+            return filters.isEmpty()
+                    ? builder.conjunction()
+                    : builder.and(filters.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
         if (query != null && !query.isBlank()) {
             String pattern = "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
             specification = specification.and((root, criteriaQuery, builder) -> {
@@ -185,38 +272,24 @@ public class FacturaVentaService
         Pageable sortedPageable = PageableSortSupport.allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion",
                 "numeroFactura", "fechaEmision", "estado", "totalIva", "totalGeneral");
-        Page<FacturaVenta> headers = search(specification, sortedPageable);
-        if (headers.isEmpty()) {
-            return headers;
-        }
-
-        var invoiceIds = headers.getContent().stream()
-                .map(FacturaVenta::getId)
-                .toList();
-        Map<Long, FacturaVenta> detailedById = repository.findDetailedByIdIn(invoiceIds).stream()
-                .collect(Collectors.toMap(FacturaVenta::getId, Function.identity()));
-        var detailedContent = headers.getContent().stream()
-                .map(header -> {
-                    FacturaVenta detailed = detailedById.get(header.getId());
-                    if (detailed == null) {
-                        throw new IllegalStateException(
-                                "No se pudieron cargar los detalles de la factura " + header.getId() + ".");
-                    }
-                    return detailed;
-                })
-                .toList();
-        return new PageImpl<>(detailedContent, headers.getPageable(), headers.getTotalElements());
+        // Solo cabeceras (con cliente, medio de pago y timbrado por EntityGraph): las líneas
+        // no se cargan en un listado.
+        return search(specification, sortedPageable);
     }
 
     @Override
     protected void copiarCambios(FacturaVenta target, FacturaVenta source) {
+        if (source != null && source.getFechaEmision() == null) {
+            source.setFechaEmision(target.getFechaEmision());
+        }
         validar(source);
         validarEditable(target);
         resolverReferencias(source);
+        validarNumeroUnico(source, target.getId());
         prepararDetalles(source);
         Map<StockKey, Integer> stockChanges = stockChanges(source, 1);
         restarStockActual(stockChanges, target);
-        ajustarStock(stockChanges);
+        ajustarStock(stockChanges, "Modificación de factura " + source.getNumeroFactura());
 
         Map<Long, Deque<FacturaVentaDetalle>> existingByProduct = new HashMap<>();
         for (FacturaVentaDetalle detalle : target.getDetalles()) {
@@ -233,9 +306,8 @@ public class FacturaVentaService
                 newDetails.add(requested);
                 continue;
             }
+            // Las líneas ya facturadas conservan el precio e IVA con los que se emitieron.
             current.setCantidad(requested.getCantidad());
-            current.setPrecioUnitario(requested.getPrecioUnitario());
-            current.setPorcentajeIva(requested.getPorcentajeIva());
             current.calcularSubtotal();
             retainedDetails.add(current);
         }
@@ -259,7 +331,7 @@ public class FacturaVentaService
     public void delete(Long id) {
         FacturaVenta factura = get(id);
         if ("EMITIDA".equalsIgnoreCase(factura.getEstado())) {
-            ajustarStock(stockChanges(factura, -1));
+            reponerStock(factura, "Baja de factura " + factura.getNumeroFactura());
             factura.setEstado(EstadoFacturaVenta.ANULADA.name());
         }
         factura.setActivo(false);
@@ -306,6 +378,21 @@ public class FacturaVentaService
         }
     }
 
+    private void validarNumeroUnico(FacturaVenta factura, Long idActual) {
+        Long timbradoId = factura.getTimbrado().getId();
+        boolean duplicada = idActual == null
+                ? repository.existsByNumeroFacturaAndTimbrado_Id(factura.getNumeroFactura(), timbradoId)
+                : repository.existsByNumeroFacturaAndTimbrado_IdAndIdNot(
+                        factura.getNumeroFactura(), timbradoId, idActual);
+        if (duplicada) {
+            log.warn("Intento de registrar un número de factura duplicado: {} (timbrado {})",
+                    factura.getNumeroFactura(), timbradoId);
+            throw new ConflictException(
+                    "Ya existe una factura con el número %s para el timbrado indicado."
+                            .formatted(factura.getNumeroFactura()));
+        }
+    }
+
     private void prepararDetalles(FacturaVenta entity) {
         for (FacturaVentaDetalle detalle : entity.getDetalles()) {
             prepararDetalle(detalle);
@@ -318,12 +405,15 @@ public class FacturaVentaService
             throw new IllegalArgumentException("Cada detalle debe indicar un producto.");
         }
         Long productoId = detalle.getProducto().getId();
-        Producto producto = productoRepository.findById(productoId)
-                .orElseThrow(() -> new ResourceNotFoundException("Producto", productoId));
+        // El producto es de inventario: de allí salen precio, IVA y estado; aquí solo se guarda la referencia.
+        ProductoResponseDTO producto = inventarioService.obtenerProducto(productoId);
+        log.debug("Producto {} recuperado: precio={} iva={}",
+                productoId, producto.getPrecioVenta(), producto.getPorcentajeIva());
         if (!Boolean.TRUE.equals(producto.getEstado())) {
-            throw new BusinessRuleException("El producto " + producto.getId() + " está inactivo.");
+            log.warn("Intento de vender el producto inactivo {}", productoId);
+            throw new BusinessRuleException("El producto " + productoId + " está inactivo.");
         }
-        detalle.setProducto(producto);
+        detalle.setProducto(entityManager.getReference(Producto.class, productoId));
         detalle.setPrecioUnitario(producto.getPrecioVenta());
         detalle.setPorcentajeIva(producto.getPorcentajeIva());
         validarDetalle(detalle);
@@ -331,17 +421,24 @@ public class FacturaVentaService
 
     private void resolverReferencias(FacturaVenta entity) {
         entity.setCliente(resolver(Cliente.class, entity.getCliente(), "Cliente"));
-        entity.setEmpleado(resolver(Empleado.class, entity.getEmpleado(), "Empleado"));
+        // Empleado y depósito son de inventario: se validan allí y aquí solo se guarda la referencia.
+        if (entity.getEmpleado() == null || entity.getEmpleado().getId() == null) {
+            throw new IllegalArgumentException("Empleado es obligatorio.");
+        }
+        Long empleadoId = entity.getEmpleado().getId();
+        if (!Boolean.TRUE.equals(inventarioService.obtenerEmpleado(empleadoId).getEstado())) {
+            throw new BusinessRuleException("El empleado está inactivo.");
+        }
+        entity.setEmpleado(entityManager.getReference(Empleado.class, empleadoId));
         if (entity.getDeposito() == null || entity.getDeposito().getId() == null) {
             throw new IllegalArgumentException("Depósito es obligatorio.");
         }
         Long depositoId = entity.getDeposito().getId();
-        Deposito deposito = depositoRepository.findById(depositoId)
-                .orElseThrow(() -> new ResourceNotFoundException("Depósito", depositoId));
+        DepositoResponseDTO deposito = inventarioService.obtenerDeposito(depositoId);
         if (!Boolean.TRUE.equals(deposito.getEstado())) {
             throw new BusinessRuleException("El depósito está inactivo.");
         }
-        entity.setDeposito(deposito);
+        entity.setDeposito(entityManager.getReference(Deposito.class, depositoId));
         MedioPago medioPago = entity.getMedioPago();
         if (medioPago == null || medioPago.getId() == null) {
             throw new IllegalArgumentException("Medio de pago es obligatorio.");
@@ -422,46 +519,78 @@ public class FacturaVentaService
         }
     }
 
-    private void ajustarStock(Map<StockKey, Integer> changes) {
-        var orderedChanges = changes.entrySet().stream()
-                .filter(entry -> entry.getValue() != 0)
-                .sorted(Map.Entry.comparingByKey(Comparator
-                        .comparing(StockKey::depositoId)
-                        .thenComparing(StockKey::productoId)))
-                .toList();
-
-        Map<StockKey, StockDeposito> stockRows = new HashMap<>();
-        Map<StockKey, Integer> resultingQuantities = new HashMap<>();
-        for (var entry : orderedChanges) {
-            StockKey key = entry.getKey();
-            StockDeposito stock = stockDepositoRepository
-                    .findByDeposito_IdAndProducto_Id(key.depositoId(), key.productoId())
-                    .orElseThrow(() -> new BusinessRuleException(
-                            "No hay stock registrado para el producto %d en el depósito %d."
-                                    .formatted(key.productoId(), key.depositoId())));
-            stockRows.put(key, stock);
-
-            int available = stock.getCantidad() == null ? 0 : stock.getCantidad();
-            int requestedChange = entry.getValue();
-            long resultingQuantity = (long) available - requestedChange;
-            if (requestedChange > 0 && available < requestedChange) {
-                throw new BusinessRuleException(
-                        "Stock insuficiente para el producto %d en el depósito %d: disponible %d, solicitado %d."
-                                .formatted(key.productoId(), key.depositoId(), available, requestedChange));
-            }
-            if (resultingQuantity < 0 || resultingQuantity > Integer.MAX_VALUE) {
-                throw new BusinessRuleException(
-                        "El ajuste de stock del producto %d en el depósito %d excede el rango permitido."
-                                .formatted(key.productoId(), key.depositoId()));
-            }
-            resultingQuantities.put(key, (int) resultingQuantity);
+    /**
+     * Devuelve a inventario lo que la factura había consumido. Anular o dar de baja una venta siempre
+     * debe poder hacerse: si inventario dio de baja el depósito o algún producto, eso no se repone
+     * (ya no hay stock que llevar) y queda registrado.
+     */
+    private void reponerStock(FacturaVenta factura, String motivo) {
+        Map<StockKey, Integer> changes = stockChanges(factura, -1);
+        if (changes.isEmpty()) {
+            return;
         }
-
-        for (var entry : orderedChanges) {
-            StockDeposito stock = stockRows.get(entry.getKey());
-            stock.setCantidad(resultingQuantities.get(entry.getKey()));
-            stockDepositoRepository.save(stock);
+        Long depositoId = factura.getDeposito().getId();
+        if (inventarioService.buscarDeposito(depositoId).isEmpty()) {
+            log.warn("El depósito {} ya no está en inventario; no se repone stock ({})", depositoId, motivo);
+            return;
         }
+        changes.keySet().removeIf(key -> {
+            boolean dadoDeBaja = inventarioService.buscarProducto(key.productoId()).isEmpty();
+            if (dadoDeBaja) {
+                log.warn("El producto {} ya no está en inventario; su stock no se repone ({})",
+                        key.productoId(), motivo);
+            }
+            return dadoDeBaja;
+        });
+        ajustarStock(changes, motivo);
+    }
+
+    /**
+     * Pide a inventario que aplique los cambios de stock. En {@code changes} una cantidad positiva
+     * es lo que la factura consume; inventario espera el signo contrario (negativo descuenta).
+     */
+    private void ajustarStock(Map<StockKey, Integer> changes, String motivo) {
+        Map<Long, Map<Long, Integer>> movimientosPorDeposito = new TreeMap<>();
+        changes.forEach((key, consumo) -> {
+            if (consumo != 0) {
+                movimientosPorDeposito.computeIfAbsent(key.depositoId(), ignored -> new TreeMap<>())
+                        .put(key.productoId(), Math.negateExact(consumo));
+            }
+        });
+
+        movimientosPorDeposito.forEach((depositoId, movimientos) -> {
+            log.debug("Movimiento de stock para el depósito {}: {} ({})", depositoId, movimientos, motivo);
+            inventarioService.moverStock(depositoId, movimientos, motivo);
+            revertirStockSiLaTransaccionFalla(depositoId, movimientos, motivo);
+        });
+    }
+
+    /**
+     * El stock vive en otro microservicio y no participa de la transacción de ventas: si la factura
+     * no llega a guardarse, se devuelve a inventario lo que ya se había movido.
+     */
+    private void revertirStockSiLaTransaccionFalla(Long depositoId, Map<Long, Integer> aplicados, String motivo) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    return;
+                }
+                Map<Long, Integer> inverso = new TreeMap<>();
+                aplicados.forEach((productoId, cantidad) -> inverso.put(productoId, -cantidad));
+                try {
+                    inventarioService.moverStock(depositoId, inverso, "Reversión: " + motivo);
+                    log.warn("La operación no se completó; se revirtió el stock del depósito {}: {} ({})",
+                            depositoId, inverso, motivo);
+                } catch (RuntimeException ex) {
+                    log.error("No se pudo revertir el stock del depósito {}: {} ({}). Requiere corrección manual.",
+                            depositoId, inverso, motivo, ex);
+                }
+            }
+        });
     }
 
     private void acumular(Map<StockKey, Integer> changes, StockKey key, int quantity) {

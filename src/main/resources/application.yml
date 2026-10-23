@@ -1,16 +1,23 @@
 server:
-  port: ${PORT:8082}
+  port: 8082
   servlet:
     context-path: /ventas
+  # Nunca se envían trazas al cliente; los errores salen con el formato de ApiErrorResponse.
+  error:
+    include-stacktrace: never
+    include-message: never
 
 spring:
   application:
     name: distrimarket-ventas
+  devtools:
+    restart:
+      enabled: false
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pos_db}?sslmode=${DB_SSLMODE:${DB_SSL_MODE:require}}&prepareThreshold=${DB_PREPARE_THRESHOLD:0}}}
-    username: ${DB_USER:postgres}
-    password: ${DB_PASSWORD:}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pos_db}?sslmode=${DB_SSL_MODE:require}&prepareThreshold=${DB_PREPARE_THRESHOLD:0}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
@@ -22,7 +29,7 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: none
+      ddl-auto: ${JPA_DDL_AUTO:none}
     properties:
       hibernate:
         format_sql: ${JPA_FORMAT_SQL:false}
@@ -45,18 +52,96 @@ spring:
     contentnegotiation:
       default-content-type: application/json
 
+  # Servidor Redis compartido por todos los microservicios del grupo.
+  data:
+    redis:
+      # 127.0.0.1 y no localhost: en Windows localhost resuelve primero a IPv6 (::1) y Redis en WSL/Docker escucha en IPv4.
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_TIMEOUT:2s}
+
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: ${INVENTARIO_CONNECT_TIMEOUT_MS:3000}
+            read-timeout: ${INVENTARIO_READ_TIMEOUT_MS:15000}
+
+# ---------------------------------------------------------------
+# Seguridad: valida los tokens emitidos por distrimarket-ms-auth.
+# ---------------------------------------------------------------
+security:
+  jwt:
+    # Misma clave y emisor que distrimarket-ms-auth y el gateway.
+    secret: ${JWT_SECRET:distrimarket-dev-secret-cambiar-en-produccion-2026}
+    issuer: ${JWT_ISSUER:distrimarket-auth}
+  # Rutas sin token (relativas a /ventas).
+  public-paths:
+    - /actuator/health/**
+    - /actuator/info
+    - /openapi.yaml
+    - /swagger-ui.html
+    - /swagger-ui/**
+    - /v3/api-docs/**
+    - /error
+  # Reglas por URL, en orden (la primera que coincide decide). Los controladores
+  # agregan reglas más finas con @PreAuthorize (por ejemplo, dar de baja solo ADMIN).
+  rules:
+    # Compras también lee los medios de pago al cargar una factura de compra.
+    - pattern: /medios-pago/**
+      methods: [GET]
+      roles: [ADMIN, VENDEDOR, COMPRADOR]
+    - pattern: /medios-pago/**
+      roles: [ADMIN]
+    - pattern: /timbrados/**
+      methods: [GET]
+      roles: [ADMIN, VENDEDOR]
+    - pattern: /timbrados/**
+      roles: [ADMIN]
+    - pattern: /**
+      roles: [ADMIN, VENDEDOR]
+
+# ---------------------------------------------------------------
+# Caché (Redis compartido). Cada dominio es una sección con su propio TTL
+# que se invalida por separado. TTL 0 = persistente (no vence; se actualiza
+# o se borra cuando el dato cambia en ventas).
+# ---------------------------------------------------------------
+distrimarket:
+  cache:
+    enabled: ${CACHE_ENABLED:true}
+    key-prefix: ${CACHE_KEY_PREFIX:distrimarket:ventas}
+    default-ttl: ${CACHE_DEFAULT_TTL:10m}
+    scan-batch-size: ${CACHE_SCAN_BATCH_SIZE:100}
+    domains:
+      # Catálogos propios que casi no cambian: persistentes.
+      medio-pago: ${CACHE_TTL_MEDIO_PAGO:0}
+      timbrado: ${CACHE_TTL_TIMBRADO:0}
+      cliente: ${CACHE_TTL_CLIENTE:30m}
+      # Factura completa por id. Solo lleva datos de ventas (de inventario, solo ids).
+      factura-venta: ${CACHE_TTL_FACTURA_VENTA:30m}
+
+# Microservicio de inventario. Con INVENTARIO_URL (por defecto) se llama por URL fija;
+# vacío, se ubica por su nombre en Eureka (service-name).
+inventario:
+  url: ${INVENTARIO_URL:http://localhost:8081}
+  service-name: ${INVENTARIO_SERVICE_NAME:distrimarket-inventario}
+  context-path: ${INVENTARIO_CONTEXT_PATH:/inventario}
+
 springdoc:
   api-docs:
     path: /v3/api-docs
+    enabled: true
   swagger-ui:
     path: /swagger-ui.html
-    url: /openapi/openapi.yml
-    display-request-duration: true
-    disable-swagger-default-url: true
-    display-operation-id: false
-
-openapi:
-  server-url: ${OPENAPI_SERVER_URL:${server.servlet.context-path:/ventas}}
+    url: /openapi.yaml
+    operations-sorter: method
+    tags-sorter: alpha
+  default-produces-media-type: application/json
+  override-with-generic-response: false
 
 management:
   endpoints:
@@ -74,9 +159,13 @@ logging:
   level:
     root: ${LOG_LEVEL_ROOT:INFO}
     com.distrimarket: ${LOG_LEVEL_APP:INFO}
+    com.distrimarket.ms.featurec.service: ${LOG_LEVEL_SERVICE:DEBUG}
     com.distrimarket.ms.featurec.repository: ${LOG_LEVEL_REPOSITORY:DEBUG}
     com.distrimarket.ms.featurec.logging.RepositoryLoggingAspect: ${LOG_LEVEL_REPOSITORY:DEBUG}
     org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+    # Operaciones de caché (GET con HIT/MISS, SET, DELETE) registradas por LoggingCache.
+    com.distrimarket.ms.featurec.config.LoggingCache: ${LOG_LEVEL_CACHE:INFO}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:INFO}
 
 pagination:
   default-page: ${PAGINATION_DEFAULT_PAGE:0}
@@ -84,16 +173,13 @@ pagination:
   max-page-size: ${PAGINATION_MAX_PAGE_SIZE:${PAGINATION_SEARCH_LIMIT:100}}
   one-indexed-parameters: ${PAGINATION_ONE_INDEXED:false}
 
-cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
-  max-age-seconds: ${CORS_MAX_AGE_SECONDS:3600}
-
 eureka:
   client:
+    enabled: ${EUREKA_ENABLED:true}
     service-url:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:${EUREKA_URL:http://localhost:8761/eureka/}}
-    register-with-eureka: ${EUREKA_REGISTER:true}
-    fetch-registry: ${EUREKA_FETCH:true}
+    register-with-eureka: true
+    fetch-registry: true
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}

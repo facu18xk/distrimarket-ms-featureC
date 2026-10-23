@@ -8,8 +8,6 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 
 public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
@@ -17,16 +15,14 @@ public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
     @Override
     @EntityGraph(attributePaths = {
             "cliente", "cliente.persona",
-            "empleado", "empleado.persona",
-            "deposito", "medioPago", "timbrado"
+            "medioPago", "timbrado"
     })
     Page<FacturaVenta> findAll(Pageable pageable);
 
     @Override
     @EntityGraph(attributePaths = {
             "cliente", "cliente.persona",
-            "empleado", "empleado.persona",
-            "deposito", "medioPago", "timbrado"
+            "medioPago", "timbrado"
     })
     Page<FacturaVenta> findAll(Specification<FacturaVenta> specification, Pageable pageable);
 
@@ -34,32 +30,16 @@ public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
             select distinct factura
             from FacturaVenta factura
             left join fetch factura.detalles detalle
-            left join fetch detalle.producto
             left join fetch factura.cliente cliente
             left join fetch cliente.persona
-            left join fetch factura.empleado empleado
-            left join fetch empleado.persona
-            left join fetch factura.deposito
-            left join fetch factura.medioPago
-            left join fetch factura.timbrado
-            where factura.id in :ids
-            """)
-    List<FacturaVenta> findDetailedByIdIn(@Param("ids") Collection<Long> ids);
-
-    @Query("""
-            select distinct factura
-            from FacturaVenta factura
-            left join fetch factura.detalles detalle
-            left join fetch detalle.producto
-            left join fetch factura.cliente cliente
-            left join fetch cliente.persona
-            left join fetch factura.empleado empleado
-            left join fetch empleado.persona
-            left join fetch factura.deposito
             left join fetch factura.medioPago
             left join fetch factura.timbrado
             where factura.id = :id
             """)
     Optional<FacturaVenta> findDetailedById(@Param("id") Long id);
+
+    boolean existsByNumeroFacturaAndTimbrado_Id(String numeroFactura, Long timbradoId);
+
+    boolean existsByNumeroFacturaAndTimbrado_IdAndIdNot(String numeroFactura, Long timbradoId, Long id);
 
 }

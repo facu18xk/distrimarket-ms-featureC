@@ -13,7 +13,6 @@ public interface FacturaVentaDetalleMapper
     @Override
     @Mapping(source = "id", target = "idDetalle")
     @Mapping(source = "producto.id", target = "idProducto")
-    @Mapping(source = "producto.nombre", target = "nombreProducto")
     FacturaVentaDetalleResponseDTO toDto(FacturaVentaDetalle entity);
 
     @Mapping(source = "idProducto", target = "producto", qualifiedByName = "productoReference")

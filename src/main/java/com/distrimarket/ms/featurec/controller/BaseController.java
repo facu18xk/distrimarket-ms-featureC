@@ -9,6 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
+/**
+ * CRUD común. Las operaciones van a los métodos con DTO del servicio, que son los que
+ * leen y escriben la caché; el controlador solo traduce HTTP.
+ */
 public abstract class BaseController<REQUEST_DTO, RESPONSE_DTO, E extends BaseEntity> {
 
     private final BaseService<E, REQUEST_DTO, RESPONSE_DTO> service;
@@ -30,24 +36,28 @@ public abstract class BaseController<REQUEST_DTO, RESPONSE_DTO, E extends BaseEn
 
     @GetMapping("/{id}")
     public RESPONSE_DTO get(@PathVariable Long id) {
-        return mapper.toDto(service.getForRead(id));
+        return service.obtener(id);
     }
 
     @PostMapping
     public ResponseEntity<RESPONSE_DTO> create(@RequestBody REQUEST_DTO request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(mapper.toDto(service.create(mapper.toEntity(request))));
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.crear(request));
     }
 
     @PutMapping("/{id}")
     public RESPONSE_DTO update(@PathVariable Long id, @RequestBody REQUEST_DTO request) {
-        return mapper.toDto(service.update(id, mapper.toEntity(request)));
+        return service.actualizar(id, request);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
-        service.delete(id);
+        service.eliminar(id);
+    }
+
+    /** Contenido de una página: cada elemento queda en caché por su id (la página no). */
+    protected List<RESPONSE_DTO> contenido(List<E> entities) {
+        return service.toResponsesCacheados(entities);
     }
 
     protected Pageable allowSorts(Pageable pageable, String... properties) {

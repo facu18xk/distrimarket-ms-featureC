@@ -1,18 +1,19 @@
 package com.distrimarket.ms.featurec.controller;
 
 import com.distrimarket.commons.entity.FacturaVenta;
+import com.distrimarket.commons.dto.EstadoFacturaVenta;
 import com.distrimarket.commons.dto.FacturaVentaEstadoRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaPageResponseDTO;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
 import com.distrimarket.ms.featurec.service.FacturaVentaService;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
-import com.distrimarket.ms.featurec.config.SearchFilterSupport;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,34 +27,40 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
-import java.util.Map;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping({"/facturas-venta", "/facturas"})
 @Tag(name = "Facturas-Venta")
+@PreAuthorize("hasAnyRole('ADMIN', 'VENDEDOR')")
 public class FacturaVentaController
         extends BaseController<FacturaVentaRequestDTO, FacturaVentaResponseDTO, FacturaVenta> {
 
     private final FacturaVentaService facturaVentaService;
-    private final FacturaVentaMapper facturaVentaMapper;
+
 
     public FacturaVentaController(
             FacturaVentaService service,
             FacturaVentaMapper mapper) {
         super(service, mapper);
         this.facturaVentaService = service;
-        this.facturaVentaMapper = mapper;
     }
 
     @GetMapping
-    @Operation(operationId = "listFacturasVenta")
+    @Operation(operationId = "listarFacturasVenta")
     public FacturaVentaPageResponseDTO listar(
-            @RequestBody(required = false) Map<String, Object> filter,
-            @Parameter(hidden = true) @RequestParam(required = false, name = "q") String legacyQuery,
+            @RequestParam(required = false, name = "q") String query,
+            @RequestParam(required = false, name = "idCliente") Long idCliente,
+            @RequestParam(required = false, name = "idEmpleado") Long idEmpleado,
+            @RequestParam(required = false, name = "idDeposito") Long idDeposito,
+            @RequestParam(required = false, name = "estado") EstadoFacturaVenta estado,
+            @RequestParam(required = false, name = "fechaDesde") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false, name = "fechaHasta") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @Parameter(hidden = true) Pageable pageable) {
-        String query = SearchFilterSupport.query(filter, legacyQuery);
-        var result = facturaVentaService.search(query, pageable);
+        var result = facturaVentaService.search(
+                query, idCliente, idEmpleado, idDeposito, estado, fechaDesde, fechaHasta, pageable);
         FacturaVentaPageResponseDTO response = new FacturaVentaPageResponseDTO();
         response.setPageNumber(result.getNumber());
         response.setPageSize(result.getSize());
@@ -61,7 +68,8 @@ public class FacturaVentaController
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(result.map(facturaVentaMapper::toDto).getContent());
+        // Solo cabeceras; el detalle (con sus líneas) se pide por id.
+        response.setContent(facturaVentaService.toResumenes(result.getContent()));
         return response;
     }
 
@@ -92,12 +100,14 @@ public class FacturaVentaController
     public FacturaVentaResponseDTO actualizarEstado(
             @PathVariable Long facturaId,
             @Valid @RequestBody FacturaVentaEstadoRequestDTO request) {
-        return facturaVentaMapper.toDto(facturaVentaService.actualizarEstado(facturaId, request.getEstado()));
+        return facturaVentaService.cambiarEstado(facturaId, request.getEstado());
     }
 
+    // Un vendedor puede anular (PATCH), pero dar de baja una factura queda para el administrador.
     @Override
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(
             description = "Conserva sus detalles y repone el stock cuando la factura estaba emitida.")
     public void delete(@PathVariable Long id) {

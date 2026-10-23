@@ -14,5 +14,9 @@ public interface TimbradoMapper extends BaseMapper<TimbradoCreateDTO, TimbradoDT
     TimbradoDTO toDto(Timbrado entity);
 
     @Override
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "fechaCreacion", ignore = true)
+    @Mapping(target = "fechaModificacion", ignore = true)
+    @Mapping(target = "activo", ignore = true)
     Timbrado toEntity(TimbradoCreateDTO request);
 }
