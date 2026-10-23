@@ -127,7 +127,8 @@ distrimarket:
 # Microservicio de inventario. Con INVENTARIO_URL (por defecto) se llama por URL fija;
 # vacío, se ubica por su nombre en Eureka (service-name).
 inventario:
-  url: ${INVENTARIO_URL:http://localhost:8081}
+  # Vacío = resolver por Eureka con inventario.service-name.
+  url: ${INVENTARIO_URL:}
   service-name: ${INVENTARIO_SERVICE_NAME:distrimarket-inventario}
   context-path: ${INVENTARIO_CONTEXT_PATH:/inventario}
 
