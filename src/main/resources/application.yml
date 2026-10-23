@@ -124,10 +124,10 @@ distrimarket:
       # Factura completa por id. Solo lleva datos de ventas (de inventario, solo ids).
       factura-venta: ${CACHE_TTL_FACTURA_VENTA:30m}
 
-# Microservicio de inventario. Con INVENTARIO_URL (por defecto) se llama por URL fija;
-# vacío, se ubica por su nombre en Eureka (service-name).
+# Microservicio de inventario: por defecto se ubica por su nombre en Eureka (service-name).
+# Con INVENTARIO_URL (por ejemplo http://localhost:8081) se llama a esa URL fija sin Eureka.
 inventario:
-  url: ${INVENTARIO_URL:http://localhost:8081}
+  url: ${INVENTARIO_URL:}
   service-name: ${INVENTARIO_SERVICE_NAME:distrimarket-inventario}
   context-path: ${INVENTARIO_CONTEXT_PATH:/inventario}
 
@@ -175,10 +175,9 @@ pagination:
 
 eureka:
   client:
-    # El grupo ya no usa Eureka (el gateway enruta por URL fija); se puede reactivar con EUREKA_ENABLED=true.
-    enabled: ${EUREKA_ENABLED:false}
+    enabled: ${EUREKA_ENABLED:true}
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
     register-with-eureka: true
     fetch-registry: true
   instance:
