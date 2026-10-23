@@ -175,8 +175,8 @@ pagination:
 
 eureka:
   client:
-    # El gateway todavía enruta por Eureka; sin servidor Eureka, EUREKA_ENABLED=false.
-    enabled: ${EUREKA_ENABLED:true}
+    # El grupo ya no usa Eureka (el gateway enruta por URL fija); se puede reactivar con EUREKA_ENABLED=true.
+    enabled: ${EUREKA_ENABLED:false}
     service-url:
       defaultZone: http://localhost:8761/eureka/
     register-with-eureka: true
