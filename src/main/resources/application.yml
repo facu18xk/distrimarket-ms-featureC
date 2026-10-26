@@ -20,11 +20,12 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
-      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:3}
+      minimum-idle: ${DB_POOL_MIN_IDLE:1}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
-      idle-timeout: ${DB_IDLE_TIMEOUT_MS:600000}
-      max-lifetime: ${DB_MAX_LIFETIME_MS:1800000}
+      idle-timeout: ${DB_IDLE_TIMEOUT_MS:240000}
+      max-lifetime: ${DB_MAX_LIFETIME_MS:300000}
+      keepalive-time: ${DB_KEEPALIVE_MS:120000}
 
   jpa:
     open-in-view: false
@@ -182,7 +183,10 @@ eureka:
     register-with-eureka: true
     fetch-registry: true
   instance:
-    prefer-ip-address: true
+    # En desarrollo todo corre en la misma máquina: registrar "localhost" evita
+    # que un cambio de IP (Wi-Fi/DHCP) deje las rutas lb:// apuntando a una IP muerta.
+    prefer-ip-address: ${EUREKA_PREFER_IP_ADDRESS:false}
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
     instance-id: ${spring.application.name}:${server.port}
     status-page-url-path: /ventas/actuator/info
     health-check-url-path: /ventas/actuator/health
