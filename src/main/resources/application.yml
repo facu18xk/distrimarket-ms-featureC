@@ -27,12 +27,17 @@ spring:
       max-lifetime: ${DB_MAX_LIFETIME_MS:1800000}
 
   jpa:
+    # Desactiva Open-Session-In-View para cerrar la sesión JPA al terminar la transacción
+    # del servicio y evitar consultas LAZY accidentales durante la serialización JSON.
     open-in-view: false
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:none}
     properties:
       hibernate:
         format_sql: ${JPA_FORMAT_SQL:false}
+        # Agrupa la carga diferida (LAZY) de colecciones y proxies en una sola consulta SQL
+        # con WHERE IN (...) para hasta 100 registros por lote, evitando consultas N+1.
+        default_batch_fetch_size: ${JPA_BATCH_FETCH_SIZE:100}
         jdbc:
           time_zone: UTC
     show-sql: ${JPA_SHOW_SQL:false}

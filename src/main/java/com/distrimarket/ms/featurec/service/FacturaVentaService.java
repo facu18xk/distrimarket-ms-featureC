@@ -394,19 +394,23 @@ public class FacturaVentaService
     }
 
     private void prepararDetalles(FacturaVenta entity) {
+        // Caché local por operación para no repetir llamadas HTTP Feign a inventario
+        // cuando la misma factura incluye varias líneas del mismo producto.
+        Map<Long, ProductoResponseDTO> productosPorId = new HashMap<>();
         for (FacturaVentaDetalle detalle : entity.getDetalles()) {
-            prepararDetalle(detalle);
+            prepararDetalle(detalle, productosPorId);
             detalle.setFacturaVenta(entity);
         }
     }
 
-    private void prepararDetalle(FacturaVentaDetalle detalle) {
+    private void prepararDetalle(FacturaVentaDetalle detalle, Map<Long, ProductoResponseDTO> productosPorId) {
         if (detalle == null || detalle.getProducto() == null || detalle.getProducto().getId() == null) {
             throw new IllegalArgumentException("Cada detalle debe indicar un producto.");
         }
         Long productoId = detalle.getProducto().getId();
         // El producto es de inventario: de allí salen precio, IVA y estado; aquí solo se guarda la referencia.
-        ProductoResponseDTO producto = inventarioService.obtenerProducto(productoId);
+        ProductoResponseDTO producto = productosPorId.computeIfAbsent(
+                productoId, inventarioService::obtenerProducto);
         log.debug("Producto {} recuperado: precio={} iva={}",
                 productoId, producto.getPrecioVenta(), producto.getPorcentajeIva());
         if (!Boolean.TRUE.equals(producto.getEstado())) {
