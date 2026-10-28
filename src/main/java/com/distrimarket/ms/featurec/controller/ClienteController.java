@@ -47,7 +47,7 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
     public ClientePageResponseDTO listar(
             @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
-        var result = clienteService.search(query, allowSorts(pageable,
+        var result = clienteService.buscar(query, allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion", "estado",
                 "persona.nombreCompleto", "persona.tipoPersona", "persona.ci", "persona.ruc"));
         ClientePageResponseDTO response = new ClientePageResponseDTO();
@@ -57,7 +57,7 @@ public class ClienteController extends BaseController<ClienteRequestDTO, Cliente
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(contenido(result.getContent()));
+        response.setContent(result.getContent());
         return response;
     }
 

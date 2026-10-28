@@ -62,6 +62,8 @@ public class CacheConfig implements CachingConfigurer {
      * de pago y el timbrado: se invalida completa cuando cambia alguno de ellos.
      */
     public static final String FACTURA_VENTA = "factura-venta";
+    /** PromocionResponseDTO por id (con sus productos y cuántos correos se enviaron). */
+    public static final String PROMOCION = "promocion";
 
     /**
      * Parámetros de application.yml (prefijo {@code distrimarket.cache}).

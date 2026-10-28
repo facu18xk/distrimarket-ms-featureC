@@ -138,8 +138,8 @@ public class TimbradoService extends AbstractBaseService<
         return search((root, query, builder) -> builder.isTrue(root.get("activo")), pageable);
     }
 
-    @Transactional(readOnly = true)
-    public Page<Timbrado> search(String query, Pageable pageable) {
+    /** Filtro de la búsqueda por texto (solo activos). */
+    public Specification<Timbrado> filtro(String query) {
         Specification<Timbrado> specification = (root, criteriaQuery, builder) ->
                 builder.isTrue(root.get("activo"));
         if (query != null && !query.isBlank()) {
@@ -161,7 +161,18 @@ public class TimbradoService extends AbstractBaseService<
                 return builder.or(matches.toArray(Predicate[]::new));
             });
         }
-        return search(specification, pageable);
+        return specification;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Timbrado> search(String query, Pageable pageable) {
+        return search(filtro(query), pageable);
+    }
+
+    /** Página para el listado: ids de la base y cada Timbrado desde la caché (ver buscarDesdeCache). */
+    @Transactional(readOnly = true)
+    public Page<TimbradoDTO> buscar(String query, Pageable pageable) {
+        return buscarDesdeCache(filtro(query), pageable);
     }
 
     @Override

@@ -45,7 +45,7 @@ public class MedioPagoController extends BaseController<MedioPagoRequestDTO, Med
     public MedioPagoPageResponseDTO listar(
             @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
-        var result = medioPagoService.search(query, allowSorts(pageable,
+        var result = medioPagoService.buscar(query, allowSorts(pageable,
                 "id", "nombre", "activo", "fechaCreacion", "fechaModificacion"));
         MedioPagoPageResponseDTO response = new MedioPagoPageResponseDTO();
         response.setPageNumber(result.getNumber());
@@ -54,7 +54,7 @@ public class MedioPagoController extends BaseController<MedioPagoRequestDTO, Med
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(contenido(result.getContent()));
+        response.setContent(result.getContent());
         return response;
     }
 

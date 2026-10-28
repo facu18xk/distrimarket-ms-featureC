@@ -131,6 +131,11 @@
         </dependency>
 
         <!-- 13. Caché en el Redis compartido -->
+        <!-- Correos de soporte y promociones (los envían jobs programados) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>

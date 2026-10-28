@@ -57,6 +57,19 @@ spring:
     contentnegotiation:
       default-content-type: application/json
 
+  # Correo saliente (SMTP de Gmail con contraseña de aplicación). Usuario y contraseña
+  # solo por variables de entorno (MAIL_USERNAME, MAIL_PASSWORD): nunca en el repositorio.
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+
   # Servidor Redis compartido por todos los microservicios del grupo.
   data:
     redis:
@@ -81,10 +94,8 @@ spring:
 # ---------------------------------------------------------------
 security:
   jwt:
-    # Misma clave y emisor que distrimarket-ms-auth y el gateway.
     secret: ${JWT_SECRET:distrimarket-dev-secret-cambiar-en-produccion-2026}
     issuer: ${JWT_ISSUER:distrimarket-auth}
-  # Rutas sin token (relativas a /ventas).
   public-paths:
     - /actuator/health/**
     - /actuator/info
@@ -93,10 +104,11 @@ security:
     - /swagger-ui/**
     - /v3/api-docs/**
     - /error
+    # Formulario de contacto a soporte: se usa desde el login, sin sesión (solo POST, ver el controlador).
+    - /soporte/contacto
   # Reglas por URL, en orden (la primera que coincide decide). Los controladores
-  # agregan reglas más finas con @PreAuthorize (por ejemplo, dar de baja solo ADMIN).
+  # agregan reglas con @PreAuthorize (por ejemplo, dar de baja solo con ADMIN).
   rules:
-    # Compras también lee los medios de pago al cargar una factura de compra.
     - pattern: /medios-pago/**
       methods: [GET]
       roles: [ADMIN, VENDEDOR, COMPRADOR]
@@ -106,6 +118,15 @@ security:
       methods: [GET]
       roles: [ADMIN, VENDEDOR]
     - pattern: /timbrados/**
+      roles: [ADMIN]
+    # Bandeja de mensajes de soporte: solo ADMIN.
+    - pattern: /soporte/**
+      roles: [ADMIN]
+    # Promociones: el vendedor las consulta; crearlas, modificarlas y enviarlas es de ADMIN.
+    - pattern: /promociones/**
+      methods: [GET]
+      roles: [ADMIN, VENDEDOR]
+    - pattern: /promociones/**
       roles: [ADMIN]
     - pattern: /**
       roles: [ADMIN, VENDEDOR]
@@ -122,12 +143,33 @@ distrimarket:
     default-ttl: ${CACHE_DEFAULT_TTL:10m}
     scan-batch-size: ${CACHE_SCAN_BATCH_SIZE:100}
     domains:
-      # Catálogos propios que casi no cambian: persistentes.
       medio-pago: ${CACHE_TTL_MEDIO_PAGO:0}
       timbrado: ${CACHE_TTL_TIMBRADO:0}
       cliente: ${CACHE_TTL_CLIENTE:30m}
-      # Factura completa por id. Solo lleva datos de ventas (de inventario, solo ids).
       factura-venta: ${CACHE_TTL_FACTURA_VENTA:30m}
+      # Promoción por id (con sus productos). Cambia poco, pero vence para reflejar el envío.
+      promocion: ${CACHE_TTL_PROMOCION:30m}
+
+  # Correos: con CORREO_HABILITADO=false (por defecto) no se envía nada y cada correo queda
+  # en el log; así se puede probar sin credenciales SMTP.
+  correo:
+    habilitado: ${CORREO_HABILITADO:false}
+    remitente: ${CORREO_REMITENTE:soporte.distrimarket@gmail.com}
+    soporte: ${CORREO_SOPORTE:soporte.distrimarket@gmail.com}
+
+  # Jobs programados (@Scheduled). Tiempos en milisegundos.
+  jobs:
+    # false = no corre ningún job (por ejemplo, en una segunda instancia de ventas).
+    enabled: ${JOBS_ENABLED:true}
+    soporte:
+      demora-inicial: ${JOB_SOPORTE_DEMORA_INICIAL_MS:30000}
+      intervalo: ${JOB_SOPORTE_INTERVALO_MS:60000}
+      lote: ${JOB_SOPORTE_LOTE:20}
+      max-intentos: ${JOB_SOPORTE_MAX_INTENTOS:5}
+    promociones:
+      demora-inicial: ${JOB_PROMOCIONES_DEMORA_INICIAL_MS:60000}
+      intervalo: ${JOB_PROMOCIONES_INTERVALO_MS:300000}
+      lote: ${JOB_PROMOCIONES_LOTE:50}
 
 # Microservicio de inventario: por defecto se ubica por su nombre en Eureka (service-name).
 # Con INVENTARIO_URL (por ejemplo http://localhost:8081) se llama a esa URL fija sin Eureka.

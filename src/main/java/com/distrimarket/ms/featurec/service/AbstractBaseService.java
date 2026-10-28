@@ -13,7 +13,20 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.annotation.Transactional;
+import com.distrimarket.commons.service.CacheEnLote;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import org.springframework.cache.CacheManager;
+import org.springframework.core.GenericTypeResolver;
+import org.springframework.data.jpa.repository.query.QueryUtils;
+import org.springframework.data.support.PageableExecutionUtils;
 
+import java.util.Collection;
 import java.util.List;
 
 public abstract class AbstractBaseService<
@@ -83,6 +96,87 @@ public abstract class AbstractBaseService<
 
     public List<RESPONSE_DTO> toResponses(List<E> entities) {
         return entities.stream().map(this::toResponse).toList();
+    }
+
+    // ------------------------------------------------------------------
+    // Listados desde la caché, objeto por objeto (ver CacheEnLote):
+    //   1. de la base, solo los ids de la página (consulta liviana, con filtros y orden);
+    //   2. cada id se busca en Redis (GET);
+    //   3. los que faltan se traen de la base en UNA consulta y se guardan (SET).
+    // La segunda vez que se pide la misma página: solo GET con HIT, sin SET.
+    // ------------------------------------------------------------------
+
+    @PersistenceContext
+    private EntityManager entityManagerBase;
+    private CacheManager cacheManager;
+
+    @Autowired(required = false)
+    public void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
+    }
+
+    /** Página de DTO a partir de un filtro: ids de la base y objetos de la caché. */
+    @Transactional(readOnly = true)
+    public Page<RESPONSE_DTO> buscarDesdeCache(Specification<E> specification, Pageable pageable) {
+        Page<Long> ids = buscarIds(specification, pageable);
+        String dominio = cacheName();
+        return CacheEnLote.pagina(ids,
+                dominio != null && cacheManager != null ? cacheManager.getCache(dominio) : null,
+                faltan -> toResponses(cargarPorIds(faltan)),
+                dto -> (Long) cacheKey(dto));
+    }
+
+    /**
+     * Objetos de la base para los ids que no estaban en caché, en una sola consulta. Cada servicio
+     * puede redefinirlo para traer también sus relaciones (EntityGraph o join fetch).
+     */
+    protected List<E> cargarPorIds(Collection<Long> ids) {
+        return repository.findAllById(ids);
+    }
+
+    /** Solo los ids de la página (activos + filtro), con el mismo orden y total que la consulta completa. */
+    @Transactional(readOnly = true)
+    public Page<Long> buscarIds(Specification<E> specification, Pageable pageable) {
+        // Desempate por id: con valores de orden repetidos, las páginas no se repiten ni saltean filas.
+        pageable = com.distrimarket.commons.service.Paginas.conDesempatePorId(pageable);
+        Class<E> tipo = tipoEntidad();
+        Specification<E> filtro = specification == null ? activeOnly() : activeOnly().and(specification);
+        CriteriaBuilder builder = entityManagerBase.getCriteriaBuilder();
+
+        CriteriaQuery<Long> consulta = builder.createQuery(Long.class);
+        Root<E> root = consulta.from(tipo);
+        Predicate condicion = filtro.toPredicate(root, consulta, builder);
+        consulta.select(root.get("id"));
+        if (condicion != null) {
+            consulta.where(condicion);
+        }
+        consulta.orderBy(QueryUtils.toOrders(pageable.getSort(), root, builder));
+        TypedQuery<Long> ids = entityManagerBase.createQuery(consulta);
+        if (pageable.isPaged()) {
+            ids.setFirstResult((int) pageable.getOffset());
+            ids.setMaxResults(pageable.getPageSize());
+        }
+        List<Long> contenido = ids.getResultList();
+
+        return PageableExecutionUtils.getPage(contenido, pageable, () -> {
+            CriteriaQuery<Long> conteo = builder.createQuery(Long.class);
+            Root<E> raiz = conteo.from(tipo);
+            Predicate condicionConteo = filtro.toPredicate(raiz, conteo, builder);
+            conteo.select(builder.count(raiz));
+            if (condicionConteo != null) {
+                conteo.where(condicionConteo);
+            }
+            return entityManagerBase.createQuery(conteo).getSingleResult();
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private Class<E> tipoEntidad() {
+        Class<?>[] tipos = GenericTypeResolver.resolveTypeArguments(getClass(), AbstractBaseService.class);
+        if (tipos == null || tipos[0] == null) {
+            throw new IllegalStateException("No se pudo determinar la entidad de " + getClass().getSimpleName());
+        }
+        return (Class<E>) tipos[0];
     }
 
     /** Dominio de caché del recurso; null si no se cachea. */

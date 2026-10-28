@@ -44,7 +44,7 @@ public class TimbradoController extends BaseController<TimbradoCreateDTO, Timbra
     public TimbradoPageResponseDTO listar(
             @RequestParam(required = false, name = "q") String query,
             @Parameter(hidden = true) Pageable pageable) {
-        var result = timbradoService.search(query, allowSorts(pageable,
+        var result = timbradoService.buscar(query, allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion", "numeroTimbrado",
                 "fechaInicio", "fechaVencimiento", "puntoExpedicion", "sucursal", "activo"));
         TimbradoPageResponseDTO response = new TimbradoPageResponseDTO();
@@ -54,7 +54,7 @@ public class TimbradoController extends BaseController<TimbradoCreateDTO, Timbra
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        response.setContent(contenido(result.getContent()));
+        response.setContent(result.getContent());
         return response;
     }
 

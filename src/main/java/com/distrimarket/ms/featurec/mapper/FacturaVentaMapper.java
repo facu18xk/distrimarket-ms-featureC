@@ -43,6 +43,9 @@ public interface FacturaVentaMapper
     @Mapping(source = "medioPago.id", target = "idMedioPago")
     FacturaVentaResumenDTO toResumen(FacturaVenta entity);
 
+    /** Cabecera a partir de la factura completa en caché (mismos campos). */
+    FacturaVentaResumenDTO resumenDe(FacturaVentaResponseDTO factura);
+
     @Override
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "fechaCreacion", ignore = true)

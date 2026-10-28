@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
@@ -50,6 +52,22 @@ public interface FacturaVentaRepository extends BaseRepository<FacturaVenta> {
             where factura.id = :id
             """)
     Optional<FacturaVenta> findDetailedById(@Param("id") Long id);
+
+    /**
+     * Facturas completas (cabecera, cliente, persona, medio de pago, timbrado y líneas) de los ids
+     * que faltaban en caché, en una sola consulta.
+     */
+    @Query("""
+            select distinct factura
+            from FacturaVenta factura
+            left join fetch factura.detalles detalle
+            left join fetch factura.cliente cliente
+            left join fetch cliente.persona
+            left join fetch factura.medioPago
+            left join fetch factura.timbrado
+            where factura.id in :ids
+            """)
+    List<FacturaVenta> findDetailedByIdIn(@Param("ids") Collection<Long> ids);
 
     boolean existsByNumeroFacturaAndTimbrado_Id(String numeroFactura, Long timbradoId);
 

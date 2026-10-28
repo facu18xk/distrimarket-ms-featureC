@@ -237,7 +237,14 @@ public class ClienteService extends AbstractBaseService<
         }
     }
 
-    public Page<Cliente> search(String query, Pageable pageable) {
+    /** Clientes que faltaban en caché, con su persona, en una sola consulta. */
+    @Override
+    protected java.util.List<Cliente> cargarPorIds(java.util.Collection<Long> ids) {
+        return repository.findByIdIn(ids);
+    }
+
+    /** Filtro de la búsqueda por texto (solo activos). */
+    public Specification<Cliente> filtro(String query) {
         Specification<Cliente> specification = (root, criteriaQuery, builder) -> {
             if (criteriaQuery.getResultType() != Long.class && criteriaQuery.getResultType() != long.class) {
                 root.fetch("persona", jakarta.persistence.criteria.JoinType.LEFT);
@@ -273,7 +280,18 @@ public class ClienteService extends AbstractBaseService<
                 return builder.or(matches.toArray(Predicate[]::new));
             });
         }
-        return search(specification, pageable);
+        return specification;
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Cliente> search(String query, Pageable pageable) {
+        return search(filtro(query), pageable);
+    }
+
+    /** Página para el listado: ids de la base y cada Cliente desde la caché (ver buscarDesdeCache). */
+    @Transactional(readOnly = true)
+    public Page<ClienteResponseDTO> buscar(String query, Pageable pageable) {
+        return buscarDesdeCache(filtro(query), pageable);
     }
 
     @Override

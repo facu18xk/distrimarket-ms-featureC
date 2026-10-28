@@ -6,6 +6,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface ClienteRepository extends BaseRepository<Cliente> {
@@ -32,4 +34,8 @@ public interface ClienteRepository extends BaseRepository<Cliente> {
     @Override
     @EntityGraph(attributePaths = "persona")
     Optional<Cliente> findById(Long id);
+
+    /** Clientes de los ids que faltaban en caché, con su persona, en una sola consulta. */
+    @EntityGraph(attributePaths = "persona")
+    List<Cliente> findByIdIn(Collection<Long> ids);
 }

@@ -59,7 +59,7 @@ public class FacturaVentaController
             @RequestParam(required = false, name = "fechaDesde") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
             @RequestParam(required = false, name = "fechaHasta") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @Parameter(hidden = true) Pageable pageable) {
-        var result = facturaVentaService.search(
+        var result = facturaVentaService.buscarResumenes(
                 query, idCliente, idEmpleado, idDeposito, estado, fechaDesde, fechaHasta, pageable);
         FacturaVentaPageResponseDTO response = new FacturaVentaPageResponseDTO();
         response.setPageNumber(result.getNumber());
@@ -68,8 +68,8 @@ public class FacturaVentaController
         response.setTotalPages(result.getTotalPages());
         response.setIsFirst(result.isFirst());
         response.setIsLast(result.isLast());
-        // Solo cabeceras; el detalle (con sus líneas) se pide por id.
-        response.setContent(facturaVentaService.toResumenes(result.getContent()));
+        // Solo cabeceras (cada factura sale de la caché por id); el detalle se pide por id.
+        response.setContent(result.getContent());
         return response;
     }
 

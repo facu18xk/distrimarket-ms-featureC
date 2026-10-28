@@ -1,5 +1,6 @@
 package com.distrimarket.ms.featurec.service;
 
+import com.distrimarket.commons.security.UsuarioActual;
 import com.distrimarket.commons.entity.FacturaVenta;
 import com.distrimarket.commons.entity.FacturaVentaDetalle;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
@@ -82,7 +83,33 @@ public class FacturaVentaService
         return facturas.stream().map(mapper::toResumen).toList();
     }
 
+    /**
+     * Quien no es ADMIN vende siempre desde el depósito asignado en su token (aunque el pedido
+     * traiga otro); un empleado sin depósito asignado sigue eligiendo.
+     */
+    private void usarDepositoDelUsuario(FacturaVentaRequestDTO request) {
+        if (request != null) {
+            request.setIdDeposito(UsuarioActual.depositoParaOperar(request.getIdDeposito()));
+        }
+    }
+
     // --- Caché (dominio "factura-venta"): la factura completa, por id ---
+
+    @Override
+    protected String cacheName() {
+        return CacheConfig.FACTURA_VENTA;
+    }
+
+    @Override
+    protected Object cacheKey(FacturaVentaResponseDTO response) {
+        return response.getIdFacturaVenta();
+    }
+
+    /** Facturas completas que faltaban en caché, con sus relaciones y líneas, en una consulta. */
+    @Override
+    protected List<FacturaVenta> cargarPorIds(java.util.Collection<Long> ids) {
+        return repository.findDetailedByIdIn(ids);
+    }
 
     @Override
     @Cacheable(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
@@ -93,12 +120,14 @@ public class FacturaVentaService
     @Override
     @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#result.idFacturaVenta")
     public FacturaVentaResponseDTO crear(FacturaVentaRequestDTO request) {
+        usarDepositoDelUsuario(request);
         return super.crear(request);
     }
 
     @Override
     @CachePut(cacheNames = CacheConfig.FACTURA_VENTA, key = "#id")
     public FacturaVentaResponseDTO actualizar(Long id, FacturaVentaRequestDTO request) {
+        usarDepositoDelUsuario(request);
         return super.actualizar(id, request);
     }
 
@@ -201,6 +230,41 @@ public class FacturaVentaService
             LocalDate fechaDesde,
             LocalDate fechaHasta,
             Pageable pageable) {
+        Consulta c = consulta(query, idCliente, idEmpleado, idDeposito, estado, fechaDesde, fechaHasta, pageable);
+        return search(c.filtro(), c.pagina());
+    }
+
+    /**
+     * Listado de cabeceras desde la caché: de la base solo los ids de la página; cada factura sale
+     * de Redis (factura completa por id) y las que faltan se traen en una consulta.
+     */
+    @Transactional(readOnly = true)
+    public Page<FacturaVentaResumenDTO> buscarResumenes(
+            String query,
+            Long idCliente,
+            Long idEmpleado,
+            Long idDeposito,
+            EstadoFacturaVenta estado,
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            Pageable pageable) {
+        Consulta c = consulta(query, idCliente, idEmpleado, idDeposito, estado, fechaDesde, fechaHasta, pageable);
+        return buscarDesdeCache(c.filtro(), c.pagina()).map(mapper::resumenDe);
+    }
+
+    /** Filtro y orden permitidos de una búsqueda de facturas. */
+    private record Consulta(Specification<FacturaVenta> filtro, Pageable pagina) {
+    }
+
+    private Consulta consulta(
+            String query,
+            Long idCliente,
+            Long idEmpleado,
+            Long idDeposito,
+            EstadoFacturaVenta estado,
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
+            Pageable pageable) {
         if (fechaDesde != null && fechaHasta != null && fechaHasta.isBefore(fechaDesde)) {
             throw new IllegalArgumentException("fechaHasta no puede ser anterior a fechaDesde.");
         }
@@ -272,9 +336,7 @@ public class FacturaVentaService
         Pageable sortedPageable = PageableSortSupport.allowSorts(pageable,
                 "id", "fechaCreacion", "fechaModificacion",
                 "numeroFactura", "fechaEmision", "estado", "totalIva", "totalGeneral");
-        // Solo cabeceras (con cliente, medio de pago y timbrado por EntityGraph): las líneas
-        // no se cargan en un listado.
-        return search(specification, sortedPageable);
+        return new Consulta(specification, sortedPageable);
     }
 
     @Override
