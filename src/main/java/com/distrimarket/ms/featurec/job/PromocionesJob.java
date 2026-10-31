@@ -60,8 +60,11 @@ public class PromocionesJob {
     }
 
     private void enviar(CampaniaPromocion promocion) {
-        List<Destinatario> pendientes = promociones.findDestinatariosPendientes(
-                promocion.getId(), promocion.getIdsProducto(), PromocionService.desde(promocion), PageRequest.of(0, lote));
+        // Sin productos elegidos, la promoción va a todos los clientes que compraron en el período.
+        List<Destinatario> pendientes = promocion.getIdsProducto().isEmpty()
+                ? promociones.findTodosLosDestinatariosPendientes(promocion.getId(), PromocionService.desde(promocion), PageRequest.of(0, lote))
+                : promociones.findDestinatariosPendientes(
+                        promocion.getId(), promocion.getIdsProducto(), PromocionService.desde(promocion), PageRequest.of(0, lote));
         log.info("Job promociones: '{}' ({}) → {} cliente(s) en este lote", promocion.getTitulo(), promocion.getId(), pendientes.size());
 
         for (Destinatario d : pendientes) {
@@ -103,6 +106,9 @@ public class PromocionesJob {
                     .append(p.getFechaInicio() == null ? "desde hoy" : "del " + p.getFechaInicio().format(FECHA))
                     .append(p.getFechaFin() == null ? "" : " al " + p.getFechaFin().format(FECHA));
         }
-        return sb.append("\n\nTe escribimos porque compraste estos productos en DistriMarket.\n").toString();
+        String motivo = p.getIdsProducto().isEmpty()
+                ? "\n\nTe escribimos porque sos cliente de DistriMarket.\n"
+                : "\n\nTe escribimos porque compraste estos productos en DistriMarket.\n";
+        return sb.append(motivo).toString();
     }
 }

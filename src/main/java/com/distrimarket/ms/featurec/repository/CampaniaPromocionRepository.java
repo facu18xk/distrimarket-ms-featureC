@@ -79,4 +79,48 @@ public interface CampaniaPromocionRepository extends JpaRepository<CampaniaPromo
               and p.correo is not null and p.correo <> ''
             """)
     long countDestinatarios(@Param("productos") Collection<Long> productos, @Param("desde") LocalDate desde);
+
+    /**
+     * Promoción sin productos elegidos: todos los clientes con correo que compraron algo
+     * (factura emitida y activa) desde {@code desde}, a los que todavía no se les envió.
+     */
+    @Query("""
+            select distinct c.id as idCliente, p.correo as correo, p.nombreCompleto as nombre
+            from FacturaVenta f
+              join f.cliente c
+              join c.persona p
+            where f.activo = true and upper(f.estado) = 'EMITIDA'
+              and f.fechaEmision >= :desde
+              and c.estado = true
+              and p.correo is not null and p.correo <> ''
+              and not exists (
+                  select 1 from CampaniaEnvio e where e.idCampania = :campania and e.idCliente = c.id)
+            """)
+    List<Destinatario> findTodosLosDestinatariosPendientes(@Param("campania") Long campania,
+                                                           @Param("desde") LocalDate desde,
+                                                           Pageable lote);
+
+    /** Cuántos clientes recibirían una promoción sin productos elegidos (vista previa). */
+    @Query("""
+            select count(distinct c.id)
+            from FacturaVenta f
+              join f.cliente c
+              join c.persona p
+            where f.activo = true and upper(f.estado) = 'EMITIDA'
+              and f.fechaEmision >= :desde
+              and c.estado = true
+              and p.correo is not null and p.correo <> ''
+            """)
+    long countTodosLosDestinatarios(@Param("desde") LocalDate desde);
+
+    /** Promociones activas con descuento y vigentes en la fecha (sin fechas = sin límite), con sus productos. */
+    @Query("""
+            select distinct c from CampaniaPromocion c
+              left join fetch c.idsProducto
+            where c.activo = true
+              and c.porcentajeDescuento is not null and c.porcentajeDescuento > 0
+              and (c.fechaInicio is null or c.fechaInicio <= :fecha)
+              and (c.fechaFin is null or c.fechaFin >= :fecha)
+            """)
+    List<CampaniaPromocion> findConDescuentoVigente(@Param("fecha") LocalDate fecha);
 }

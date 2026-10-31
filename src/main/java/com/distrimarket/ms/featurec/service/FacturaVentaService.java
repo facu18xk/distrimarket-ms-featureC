@@ -61,18 +61,21 @@ public class FacturaVentaService
     private final MedioPagoRepository medioPagoRepository;
     private final InventarioService inventarioService;
     private final EntityManager entityManager;
+    private final PromocionService promocionService;
 
     public FacturaVentaService(
             FacturaVentaRepository repository,
             FacturaVentaMapper mapper,
             MedioPagoRepository medioPagoRepository,
             InventarioService inventarioService,
-            EntityManager entityManager) {
+            EntityManager entityManager,
+            PromocionService promocionService) {
         super(repository, mapper, "Factura de venta");
         this.repository = repository;
         this.medioPagoRepository = medioPagoRepository;
         this.inventarioService = inventarioService;
         this.entityManager = entityManager;
+        this.promocionService = promocionService;
     }
 
     /**
@@ -459,13 +462,16 @@ public class FacturaVentaService
         // Caché local por operación para no repetir llamadas HTTP Feign a inventario
         // cuando la misma factura incluye varias líneas del mismo producto.
         Map<Long, ProductoResponseDTO> productosPorId = new HashMap<>();
+        // Promociones vigentes en la fecha de la factura: su descuento baja el precio de la línea.
+        Map<Long, PromocionService.DescuentoVigente> descuentos = promocionService.descuentosVigentes(entity.getFechaEmision());
         for (FacturaVentaDetalle detalle : entity.getDetalles()) {
-            prepararDetalle(detalle, productosPorId);
+            prepararDetalle(detalle, productosPorId, descuentos);
             detalle.setFacturaVenta(entity);
         }
     }
 
-    private void prepararDetalle(FacturaVentaDetalle detalle, Map<Long, ProductoResponseDTO> productosPorId) {
+    private void prepararDetalle(FacturaVentaDetalle detalle, Map<Long, ProductoResponseDTO> productosPorId,
+                                 Map<Long, PromocionService.DescuentoVigente> descuentos) {
         if (detalle == null || detalle.getProducto() == null || detalle.getProducto().getId() == null) {
             throw new IllegalArgumentException("Cada detalle debe indicar un producto.");
         }
@@ -480,7 +486,11 @@ public class FacturaVentaService
             throw new BusinessRuleException("El producto " + productoId + " está inactivo.");
         }
         detalle.setProducto(entityManager.getReference(Producto.class, productoId));
-        detalle.setPrecioUnitario(producto.getPrecioVenta());
+        // El precio del producto en inventario no cambia: el descuento queda solo en esta línea.
+        PromocionService.DescuentoVigente descuento = descuentos.get(productoId);
+        detalle.setPrecioUnitario(descuento == null
+                ? producto.getPrecioVenta()
+                : PromocionService.conDescuento(producto.getPrecioVenta(), descuento.porcentaje()));
         detalle.setPorcentajeIva(producto.getPorcentajeIva());
         validarDetalle(detalle);
     }
@@ -670,4 +680,39 @@ public class FacturaVentaService
 
     private record StockKey(Long depositoId, Long productoId) {
     }
+
+    /** Reporte: productos más vendidos del período (por unidades), con los filtros del listado. */
+    @Transactional(readOnly = true)
+    public List<FacturaVentaRepository.ProductoVendido> productosMasVendidos(
+            LocalDate fechaDesde, LocalDate fechaHasta, Long idCliente, Long idEmpleado, Long idDeposito) {
+        if (fechaHasta.isBefore(fechaDesde)) {
+            throw new IllegalArgumentException("fechaHasta no puede ser anterior a fechaDesde.");
+        }
+        return repository.productosMasVendidos(fechaDesde, fechaHasta, idCliente, idEmpleado, idDeposito);
+    }
+
+    /**
+     * Número de factura automático: el siguiente de la secuencia del timbrado
+     * (sucursal-punto de expedición-número), por ejemplo 001-001-0000007.
+     */
+    @Transactional(readOnly = true)
+    public String siguienteNumero(Long idTimbrado) {
+        Timbrado timbrado = entityManager.find(Timbrado.class, idTimbrado);
+        if (timbrado == null || Boolean.FALSE.equals(timbrado.getActivo())) {
+            throw new ResourceNotFoundException("Timbrado no encontrado con ID: " + idTimbrado);
+        }
+        String prefijo = codigo3(timbrado.getSucursal()) + "-" + codigo3(timbrado.getPuntoExpedicion()) + "-";
+        long ultimo = repository.ultimoNumero(idTimbrado, prefijo + "%")
+                .map(n -> n.substring(prefijo.length()).replaceAll("[^0-9]", ""))
+                .filter(n -> !n.isEmpty())
+                .map(Long::parseLong)
+                .orElse(0L);
+        return prefijo + String.format("%07d", ultimo + 1);
+    }
+
+    private static String codigo3(String valor) {
+        String digitos = valor == null ? "" : valor.replaceAll("[^0-9]", "");
+        return String.format("%3s", digitos.isEmpty() ? "1" : digitos).replace(' ', '0');
+    }
+
 }

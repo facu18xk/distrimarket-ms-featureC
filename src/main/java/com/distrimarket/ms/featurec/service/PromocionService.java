@@ -25,11 +25,14 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Map;
 
 /**
  * Promociones por producto. El envío por correo lo hace el job {@code PromocionesJob}: toma las
@@ -122,7 +125,11 @@ public class PromocionService {
     public PromocionDestinatariosDTO destinatarios(Long id) {
         CampaniaPromocion promocion = buscar(id);
         PromocionDestinatariosDTO dto = new PromocionDestinatariosDTO();
-        dto.setClientes((int) repository.countDestinatarios(promocion.getIdsProducto(), desde(promocion)));
+        // Sin productos elegidos: todos los clientes que compraron en el período.
+        long clientes = promocion.getIdsProducto().isEmpty()
+                ? repository.countTodosLosDestinatarios(desde(promocion))
+                : repository.countDestinatarios(promocion.getIdsProducto(), desde(promocion));
+        dto.setClientes((int) clientes);
         return dto;
     }
 
@@ -148,7 +155,7 @@ public class PromocionService {
         promocion.setFechaFin(request.getFechaFin());
         promocion.setDiasHistorial(request.getDiasHistorial() == null ? 180 : request.getDiasHistorial());
         promocion.setFechaEnvio(request.getFechaEnvio() == null ? null : request.getFechaEnvio().atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime());
-        promocion.setIdsProducto(new HashSet<>(request.getIdsProducto()));
+        promocion.setIdsProducto(request.getIdsProducto() == null ? new HashSet<>() : new HashSet<>(request.getIdsProducto()));
     }
 
     PromocionResponseDTO toDto(CampaniaPromocion p) {
@@ -166,5 +173,37 @@ public class PromocionService {
         dto.setIdsProducto(new ArrayList<>(p.getIdsProducto()).stream().sorted().toList());
         dto.setCorreosEnviados((int) envioRepository.countByIdCampaniaAndEnviadoTrue(p.getId()));
         return dto;
+    }
+
+    /** Descuento que una promoción vigente le aplica a un producto al venderlo. */
+    public record DescuentoVigente(Long idProducto, BigDecimal porcentaje, Long idPromocion, String titulo) {
+    }
+
+    /**
+     * Descuentos vigentes en una fecha, por producto. Si un producto está en varias promociones
+     * vigentes, se aplica la de mayor descuento. El precio del producto en inventario no cambia:
+     * el descuento se aplica solo en la línea de la factura.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, DescuentoVigente> descuentosVigentes(LocalDate fecha) {
+        Map<Long, DescuentoVigente> porProducto = new java.util.HashMap<>();
+        for (CampaniaPromocion p : repository.findConDescuentoVigente(fecha == null ? LocalDate.now() : fecha)) {
+            for (Long idProducto : p.getIdsProducto()) {
+                DescuentoVigente actual = porProducto.get(idProducto);
+                if (actual == null || p.getPorcentajeDescuento().compareTo(actual.porcentaje()) > 0) {
+                    porProducto.put(idProducto, new DescuentoVigente(idProducto, p.getPorcentajeDescuento(), p.getId(), p.getTitulo()));
+                }
+            }
+        }
+        return porProducto;
+    }
+
+    /** Precio con descuento, en guaraníes enteros (redondeado). */
+    public static BigDecimal conDescuento(BigDecimal precio, BigDecimal porcentaje) {
+        if (precio == null || porcentaje == null || porcentaje.signum() <= 0) {
+            return precio;
+        }
+        BigDecimal factor = BigDecimal.valueOf(100).subtract(porcentaje.min(BigDecimal.valueOf(100)));
+        return precio.multiply(factor).divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP);
     }
 }

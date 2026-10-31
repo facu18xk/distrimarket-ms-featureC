@@ -43,6 +43,14 @@ public class PromocionController {
         return response;
     }
 
+    /** Descuentos de promociones vigentes por producto (la factura los muestra y el backend los aplica al guardar). */
+    @GetMapping("/descuentos-vigentes")
+    @Operation(summary = "Descuentos vigentes por producto en una fecha (por defecto, hoy)")
+    public java.util.Collection<PromocionService.DescuentoVigente> descuentosVigentes(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha) {
+        return promocionService.descuentosVigentes(fecha).values();
+    }
+
     @GetMapping("/{id}")
     @Operation(operationId = "obtenerPromocion")
     public PromocionResponseDTO obtener(@PathVariable Long id) {

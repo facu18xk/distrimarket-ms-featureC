@@ -118,4 +118,25 @@ class PromocionServiceTest {
 
         assertThat(service.destinatarios(7L).getClientes()).isEqualTo(4);
     }
+
+    @Test
+    void elDescuentoVigenteMayorGanaYElPrecioSeRedondeaEnGuaranies() {
+        CampaniaPromocion diez = promocion(false);
+        diez.setPorcentajeDescuento(BigDecimal.TEN);
+        diez.setIdsProducto(Set.of(1L, 2L));
+        CampaniaPromocion veinte = promocion(false);
+        veinte.setId(8L);
+        veinte.setPorcentajeDescuento(new BigDecimal("20"));
+        veinte.setIdsProducto(Set.of(2L));
+        when(repository.findConDescuentoVigente(LocalDate.of(2026, 10, 31))).thenReturn(List.of(diez, veinte));
+
+        var descuentos = service.descuentosVigentes(LocalDate.of(2026, 10, 31));
+
+        assertThat(descuentos.get(1L).porcentaje()).isEqualByComparingTo("10");
+        assertThat(descuentos.get(2L).porcentaje()).isEqualByComparingTo("20");
+        assertThat(descuentos).doesNotContainKey(3L);
+        assertThat(PromocionService.conDescuento(new BigDecimal("6000"), new BigDecimal("10"))).isEqualByComparingTo("5400");
+        assertThat(PromocionService.conDescuento(new BigDecimal("6005"), new BigDecimal("12.5"))).isEqualByComparingTo("5254");
+        assertThat(PromocionService.conDescuento(new BigDecimal("6000"), null)).isEqualByComparingTo("6000");
+    }
 }

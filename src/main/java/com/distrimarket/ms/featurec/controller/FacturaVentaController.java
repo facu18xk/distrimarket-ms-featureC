@@ -6,6 +6,7 @@ import com.distrimarket.commons.dto.FacturaVentaEstadoRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaPageResponseDTO;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
+import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.service.FacturaVentaService;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/facturas-venta")
@@ -71,6 +73,25 @@ public class FacturaVentaController
         // Solo cabeceras (cada factura sale de la caché por id); el detalle se pide por id.
         response.setContent(result.getContent());
         return response;
+    }
+
+    /** Número de factura automático: el siguiente de la secuencia del timbrado. */
+    @GetMapping("/siguiente-numero")
+    @Operation(operationId = "siguienteNumeroFactura", summary = "Siguiente número de factura de un timbrado (001-001-0000007)")
+    public java.util.Map<String, String> siguienteNumero(@RequestParam(name = "idTimbrado") Long idTimbrado) {
+        return java.util.Map.of("numeroFactura", facturaVentaService.siguienteNumero(idTimbrado));
+    }
+
+    /** Reporte: productos más vendidos del período, agrupados en la base (no se piden las facturas una por una). */
+    @GetMapping("/reporte/productos")
+    @Operation(operationId = "productosMasVendidos", summary = "Productos más vendidos (unidades, total y facturas) del período")
+    public List<FacturaVentaRepository.ProductoVendido> productosMasVendidos(
+            @RequestParam(name = "fechaDesde") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(name = "fechaHasta") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false, name = "idCliente") Long idCliente,
+            @RequestParam(required = false, name = "idEmpleado") Long idEmpleado,
+            @RequestParam(required = false, name = "idDeposito") Long idDeposito) {
+        return facturaVentaService.productosMasVendidos(fechaDesde, fechaHasta, idCliente, idEmpleado, idDeposito);
     }
 
     @Override
