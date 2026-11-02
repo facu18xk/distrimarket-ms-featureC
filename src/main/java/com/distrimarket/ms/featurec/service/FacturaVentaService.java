@@ -1,6 +1,7 @@
 package com.distrimarket.ms.featurec.service;
 
 import com.distrimarket.commons.security.UsuarioActual;
+import com.distrimarket.ms.featurec.security.DepositoVisible;
 import com.distrimarket.commons.entity.FacturaVenta;
 import com.distrimarket.commons.entity.FacturaVentaDetalle;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
@@ -29,6 +30,7 @@ import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
 import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
 import com.distrimarket.ms.featurec.repository.MedioPagoRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -160,12 +162,18 @@ public class FacturaVentaService
         validarId(id);
         FacturaVenta factura = repository.findDetailedById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Factura de venta", id));
+        // Una factura de otro depósito "no existe" para quien está limitado a su depósito
+        // (vale para ver, modificar, anular, reemitir y dar de baja).
+        if (!DepositoVisible.puedeVer(factura.getDeposito() == null ? null : factura.getDeposito().getId())) {
+            throw new ResourceNotFoundException("Factura de venta", id);
+        }
         return validarActivo(factura, id);
     }
 
     @Override
     @Transactional
     public FacturaVenta create(FacturaVenta entity) {
+        asignarNumeroAutomatico(entity);
         validar(entity);
         entity.setId(null);
         if (entity.getActivo() == null) {
@@ -268,6 +276,8 @@ public class FacturaVentaService
             LocalDate fechaDesde,
             LocalDate fechaHasta,
             Pageable pageable) {
+        // Quien tiene depósito asignado (y no es ADMIN) solo ve las facturas de su depósito.
+        Long depositoVisible = DepositoVisible.filtro(idDeposito);
         if (fechaDesde != null && fechaHasta != null && fechaHasta.isBefore(fechaDesde)) {
             throw new IllegalArgumentException("fechaHasta no puede ser anterior a fechaDesde.");
         }
@@ -279,8 +289,8 @@ public class FacturaVentaService
             if (idEmpleado != null) {
                 filters.add(builder.equal(root.get("empleado").get("id"), idEmpleado));
             }
-            if (idDeposito != null) {
-                filters.add(builder.equal(root.get("deposito").get("id"), idDeposito));
+            if (depositoVisible != null) {
+                filters.add(builder.equal(root.get("deposito").get("id"), depositoVisible));
             }
             if (estado != null) {
                 filters.add(builder.equal(root.get("estado"), estado.name()));
@@ -346,6 +356,11 @@ public class FacturaVentaService
     protected void copiarCambios(FacturaVenta target, FacturaVenta source) {
         if (source != null && source.getFechaEmision() == null) {
             source.setFechaEmision(target.getFechaEmision());
+        }
+        // El número y el timbrado se asignan al emitir y no se cambian después (aunque el pedido traiga otros).
+        if (source != null) {
+            source.setNumeroFactura(target.getNumeroFactura());
+            source.setTimbrado(target.getTimbrado());
         }
         validar(source);
         validarEditable(target);
@@ -688,7 +703,7 @@ public class FacturaVentaService
         if (fechaHasta.isBefore(fechaDesde)) {
             throw new IllegalArgumentException("fechaHasta no puede ser anterior a fechaDesde.");
         }
-        return repository.productosMasVendidos(fechaDesde, fechaHasta, idCliente, idEmpleado, idDeposito);
+        return repository.productosMasVendidos(fechaDesde, fechaHasta, idCliente, idEmpleado, DepositoVisible.filtro(idDeposito));
     }
 
     /**
@@ -701,6 +716,27 @@ public class FacturaVentaService
         if (timbrado == null || Boolean.FALSE.equals(timbrado.getActivo())) {
             throw new ResourceNotFoundException("Timbrado no encontrado con ID: " + idTimbrado);
         }
+        return siguienteNumero(timbrado);
+    }
+
+    /**
+     * Al emitir, el número lo pone ventas (el que mande el pedido se ignora): el siguiente del timbrado.
+     * La fila del timbrado se bloquea hasta el fin de la transacción, así dos ventas simultáneas con el
+     * mismo timbrado no pueden tomar el mismo número.
+     */
+    private void asignarNumeroAutomatico(FacturaVenta factura) {
+        if (factura == null || factura.getTimbrado() == null || factura.getTimbrado().getId() == null) {
+            return; // validar() informa que falta el timbrado
+        }
+        Timbrado timbrado = entityManager.find(Timbrado.class, factura.getTimbrado().getId(), LockModeType.PESSIMISTIC_WRITE);
+        if (timbrado == null || Boolean.FALSE.equals(timbrado.getActivo())) {
+            throw new ResourceNotFoundException("Timbrado no encontrado con ID: " + factura.getTimbrado().getId());
+        }
+        factura.setNumeroFactura(siguienteNumero(timbrado));
+    }
+
+    private String siguienteNumero(Timbrado timbrado) {
+        Long idTimbrado = timbrado.getId();
         String prefijo = codigo3(timbrado.getSucursal()) + "-" + codigo3(timbrado.getPuntoExpedicion()) + "-";
         long ultimo = repository.ultimoNumero(idTimbrado, prefijo + "%")
                 .map(n -> n.substring(prefijo.length()).replaceAll("[^0-9]", ""))

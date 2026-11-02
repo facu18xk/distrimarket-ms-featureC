@@ -7,6 +7,8 @@ import com.distrimarket.commons.dto.FacturaVentaPageResponseDTO;
 import com.distrimarket.commons.dto.FacturaVentaRequestDTO;
 import com.distrimarket.commons.dto.FacturaVentaResponseDTO;
 import com.distrimarket.ms.featurec.repository.FacturaVentaRepository;
+import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
+import com.distrimarket.ms.featurec.security.DepositoVisible;
 import com.distrimarket.ms.featurec.service.FacturaVentaService;
 import com.distrimarket.ms.featurec.mapper.FacturaVentaMapper;
 import io.swagger.v3.oas.annotations.Operation;
@@ -97,7 +99,12 @@ public class FacturaVentaController
     @Override
     @GetMapping("/{id}")
     public FacturaVentaResponseDTO get(@PathVariable Long id) {
-        return super.get(id);
+        FacturaVentaResponseDTO factura = super.get(id);
+        // El detalle sale de la caché: el control de depósito se hace también acá.
+        if (!DepositoVisible.puedeVer(factura.getIdDeposito())) {
+            throw new ResourceNotFoundException("Factura de venta", id);
+        }
+        return factura;
     }
 
     @Override
