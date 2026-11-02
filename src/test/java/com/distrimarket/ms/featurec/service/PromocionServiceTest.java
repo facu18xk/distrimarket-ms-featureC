@@ -9,7 +9,13 @@ import com.distrimarket.ms.featurec.exception.ResourceNotFoundException;
 import com.distrimarket.ms.featurec.repository.CampaniaEnvioRepository;
 import com.distrimarket.ms.featurec.repository.CampaniaPromocionRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.cache.CacheManager;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -19,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -138,5 +145,54 @@ class PromocionServiceTest {
         assertThat(PromocionService.conDescuento(new BigDecimal("6000"), new BigDecimal("10"))).isEqualByComparingTo("5400");
         assertThat(PromocionService.conDescuento(new BigDecimal("6005"), new BigDecimal("12.5"))).isEqualByComparingTo("5254");
         assertThat(PromocionService.conDescuento(new BigDecimal("6000"), null)).isEqualByComparingTo("6000");
+    }
+
+    @Test
+    void listarSinOrdenUsaIdDescendente() {
+        when(repository.findAll(org.mockito.ArgumentMatchers.<Specification<CampaniaPromocion>>any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        service.listar(null, PageRequest.of(0, 10));
+
+        Pageable orden = capturarOrdenDeListado();
+        assertThat(orden.getSort().toList()).containsExactly(Sort.Order.desc("id"));
+    }
+
+    @Test
+    void listarConservaElOrdenPedidoYAgregaIdComoDesempate() {
+        when(repository.findAll(org.mockito.ArgumentMatchers.<Specification<CampaniaPromocion>>any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        service.listar(null, PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "titulo")));
+
+        Pageable orden = capturarOrdenDeListado();
+        assertThat(orden.getSort().stream().map(Sort.Order::getProperty)).containsExactly("titulo", "id");
+        assertThat(orden.getSort().getOrderFor("titulo").getDirection()).isEqualTo(Sort.Direction.ASC);
+        assertThat(orden.getSort().getOrderFor("id").getDirection()).isEqualTo(Sort.Direction.ASC);
+    }
+
+    @Test
+    void listarAceptaLasClavesDeOrdenDeLaUi() {
+        when(repository.findAll(org.mockito.ArgumentMatchers.<Specification<CampaniaPromocion>>any(), any(Pageable.class))).thenReturn(Page.empty());
+
+        assertThatCode(() -> {
+            for (String propiedad : List.of("titulo", "porcentajeDescuento", "fechaInicio", "fechaFin",
+                    "fechaEnvio", "enviado", "fechaCreacion", "fechaModificacion")) {
+                service.listar(null, PageRequest.of(0, 10, Sort.by(propiedad)));
+            }
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void listarRechazaPropiedadesDeOrdenNoPermitidas() {
+        assertThatThrownBy(() -> service.listar(null, PageRequest.of(0, 10, Sort.by("idsProducto"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("idsProducto")
+                .hasMessageContaining("Valores permitidos");
+        verify(repository, never()).findAll(org.mockito.ArgumentMatchers.<Specification<CampaniaPromocion>>any(), any(Pageable.class));
+    }
+
+    private Pageable capturarOrdenDeListado() {
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(repository).findAll(org.mockito.ArgumentMatchers.<Specification<CampaniaPromocion>>any(), captor.capture());
+        return captor.getValue();
     }
 }

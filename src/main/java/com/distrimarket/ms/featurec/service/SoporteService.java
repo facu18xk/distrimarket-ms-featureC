@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Mensajes de contacto a soporte. Guardarlo es inmediato (responde 202); el correo lo envía
@@ -25,6 +26,12 @@ import java.util.List;
 @Slf4j
 @Service
 public class SoporteService {
+
+    /** Campos por los que la UI puede ordenar (más "id" y el timestamp real de la entidad). */
+    private static final Set<String> ORDENES_PERMITIDOS = Set.of(
+            "id", "fechaCreacion", "atendido", "nombreRemitente", "correoRemitente",
+            "asunto", "correoEnviado");
+    private static final Sort ORDEN_POR_DEFECTO = Sort.by(Sort.Direction.DESC, "id");
 
     private final ContactoMensajeRepository repository;
 
@@ -47,10 +54,8 @@ public class SoporteService {
 
     @Transactional(readOnly = true)
     public Page<ContactoMensajeResponseDTO> listar(Boolean atendido, Pageable pageable) {
-        // Los más nuevos primero, salvo que se pida otro orden.
-        Pageable orden = pageable.getSort().isSorted() ? pageable
-                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(Sort.Direction.DESC, "id"));
-        Pageable pagina = Paginas.conDesempatePorId(orden);
+        // Los más nuevos primero, salvo que se pida otro orden; siempre con desempate por id.
+        Pageable pagina = Paginas.conOrdenPermitido(pageable, ORDENES_PERMITIDOS, ORDEN_POR_DEFECTO);
         Page<ContactoMensaje> mensajes = atendido == null ? repository.findAll(pagina) : repository.findByAtendido(atendido, pagina);
         return mensajes.map(this::toDto);
     }

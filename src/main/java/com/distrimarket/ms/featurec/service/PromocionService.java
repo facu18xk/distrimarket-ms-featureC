@@ -21,6 +21,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Promociones por producto. El envío por correo lo hace el job {@code PromocionesJob}: toma las
@@ -41,6 +43,12 @@ import java.util.Map;
 @Slf4j
 @Service
 public class PromocionService {
+
+    /** Campos por los que la UI puede ordenar (más "id" y los timestamps de la entidad). */
+    private static final Set<String> ORDENES_PERMITIDOS = Set.of(
+            "id", "titulo", "porcentajeDescuento", "fechaInicio", "fechaFin",
+            "fechaEnvio", "enviado", "fechaCreacion", "fechaModificacion");
+    private static final Sort ORDEN_POR_DEFECTO = Sort.by(Sort.Direction.DESC, "id");
 
     private final CampaniaPromocionRepository repository;
     private final CampaniaEnvioRepository envioRepository;
@@ -62,7 +70,8 @@ public class PromocionService {
                 .and(BusquedaTexto.en(q, "titulo"));
         // Pocas filas y livianas: la página ya trae las promociones; las que no estaban en caché se
         // arman desde ahí (sin otra consulta) y se guardan.
-        Page<CampaniaPromocion> pagina = repository.findAll(filtro, Paginas.conDesempatePorId(pageable));
+        Page<CampaniaPromocion> pagina = repository.findAll(filtro,
+                Paginas.conOrdenPermitido(pageable, ORDENES_PERMITIDOS, ORDEN_POR_DEFECTO));
         var porId = new java.util.HashMap<Long, CampaniaPromocion>();
         pagina.forEach(p -> porId.put(p.getId(), p));
         return CacheEnLote.pagina(
