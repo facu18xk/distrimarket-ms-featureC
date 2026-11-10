@@ -65,10 +65,17 @@ spring:
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     properties:
-      mail.smtp.auth: true
-      mail.smtp.starttls.enable: true
-      mail.smtp.connectiontimeout: 5000
-      mail.smtp.timeout: 10000
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: "smtp.gmail.com"
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 5000
 
   # Servidor Redis compartido por todos los microservicios del grupo.
   data:
@@ -153,7 +160,7 @@ distrimarket:
   # Correos: con CORREO_HABILITADO=false (por defecto) no se envía nada y cada correo queda
   # en el log; así se puede probar sin credenciales SMTP.
   correo:
-    habilitado: ${CORREO_HABILITADO:false}
+    habilitado: ${CORREO_HABILITADO:true}
     remitente: ${CORREO_REMITENTE:soporte.distrimarket@gmail.com}
     soporte: ${CORREO_SOPORTE:soporte.distrimarket@gmail.com}
 
@@ -199,6 +206,9 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    mail:
+      enabled: false
 
 logging:
   file:
