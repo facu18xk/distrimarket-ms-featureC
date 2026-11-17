@@ -15,6 +15,7 @@
     <artifactId>distrimarket-ventas</artifactId>
     <version>0.0.1</version>
     <name>distrimarket-ventas</name>
+    <packaging>war</packaging>
 
     <properties>
         <java.version>21</java.version>
@@ -156,9 +157,17 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- 15. TOMCAT -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-tomcat</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>
+        <finalName>ventas</finalName>
         <plugins>
             <!-- Plugin para habilitar Spring Boot -->
             <plugin>
